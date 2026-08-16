@@ -1231,11 +1231,11 @@ var _Sources = (() => {
   // src/DesuME/DesuMEParser.ts
   var parseSearch = (data) => {
     const results = [];
-    for (const obj of data.response) {
+    for (const obj of data.mangas ?? []) {  // ← data.response → data.mangas
       const id = obj?.id ?? "";
-      const title = obj?.name ?? "";
-      const image = obj.image.original ? obj.image.original : "";
-      const subtitle = obj?.chapters?.updated?.ch ?? "";
+      const title = obj?.russian || obj?.name || ""; // лучше брать russian
+      const image = obj?.cover?.preview || obj?.cover?.snippet || "";
+      const subtitle = "";                          // в новом API нет chapters.updated
       if (!id) continue;
       results.push(App.createPartialSourceManga({
         title: decodeHTML(title),
@@ -1247,17 +1247,17 @@ var _Sources = (() => {
     return results;
   };
   var parseMangaDetails = (data, mangaId) => {
-    const details = data.response;
+    const details = data.manga;                     // ← data.response → data.manga
     const titles = [];
     if (details?.name) titles.push(details?.name.trim());
     if (details?.russian) titles.push(details?.russian.trim());
-    const image = details.image.original ? details.image.original : "";
+    const image = details?.cover?.preview || details?.cover?.snippet || "";
     const author = details.authors ?? "";
     const arrayTags = [];
     if (details?.genres) {
-      for (const category of details.genres) {
-        const id = category.text.replace(/ /g, "+").replace(/%20/g, "+") ?? "";
-        const label = category?.russian ?? "";
+      for (const category of details.genres ?? []) {
+        const id = category.slug || String(category.genre_id);
+        const label = category?.name ?? "";
         if (!id || !label)
           continue;
         arrayTags.push({
@@ -1302,12 +1302,12 @@ var _Sources = (() => {
   var parseChapters = (data) => {
     const chapters = [];
     let sortingIndex = 0;
-    for (const chapter of data.response.chapters.list) {
+    for (const chapter of data.chapters ?? []) {     // ← data.response.chapters.list → data.chapters
       const id = chapter?.id ?? "";
-      const chapNum = chapter?.ch ? Number(chapter.ch) : 0;
-      const chapVol = chapter?.ch ? Number(chapter.vol) : 0;
-      const time = chapter?.date ? new Date(chapter?.date * 1e3) : /* @__PURE__ */ new Date();
-      const name = chapter?.title ? chapter?.title : "";
+      const chapNum = chapter?.number ? Number(chapter.number) : 0;
+      const chapVol = chapter?.volume ? Number(chapter.volume) : 0;
+      const time = chapter?.publish_date ? new Date(chapter.publish_date * 1000) : new Date();
+      const name = chapter?.title || "";
       if (!id) continue;
       chapters.push({
         id: `${id}`,
@@ -1328,8 +1328,8 @@ var _Sources = (() => {
   };
   var parseChapterDetails = (data, mangaId, chapterId) => {
     const pages = [];
-    for (const page of data.response.pages.list) {
-      const url = page.img ?? "";
+    for (const page of data.chapter?.pages ?? []) {  // ← data.response.pages.list → data.chapter.pages
+      const url = page.url ?? "";
       if (!url) continue;
       pages.push(url);
     }
@@ -1587,7 +1587,7 @@ var _Sources = (() => {
 
   // src/DesuME/DesuME.ts
   var DOMAIN = "https://desu.uno";
-  var API = `${DOMAIN}/api/manga/:id`;
+  var API = `${DOMAIN}/api`;
   var DesuMEInfo = {
     version: "2.0.4",
     name: "Desu",
@@ -1636,7 +1636,7 @@ var _Sources = (() => {
       const sections = [
         {
           request: App.createRequest({
-            url: `${API}/?limit=${this.limit}&order=popular&page=1`,
+            url: `${API}/manga/catalog?limit=${this.limit}&order=popular&page=1`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1648,7 +1648,7 @@ var _Sources = (() => {
         },
         {
           request: App.createRequest({
-            url: `${API}/?limit=${this.limit}&order=updated&page=1`,
+            url: `${API}/manga/catalog?limit=${this.limit}&order=updated&page=1`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1660,7 +1660,7 @@ var _Sources = (() => {
         },
         {
           request: App.createRequest({
-            url: `${API}/?limit=${this.limit}&order=name&page=1`,
+            url: `${API}/manga/catalog?limit=${this.limit}&order=name&page=1`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1691,7 +1691,7 @@ var _Sources = (() => {
     async getViewMoreItems(homepageSectionId, metadata) {
       const page = metadata?.page ?? 1;
       const request = App.createRequest({
-        url: `${API}/?limit=${this.limit}&order=${homepageSectionId}&page=${page}`,
+        url: `${API}/manga/catalog?limit=${this.limit}&order=${homepageSectionId}&page=${page}`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
@@ -1711,7 +1711,7 @@ var _Sources = (() => {
     }
     async getSearchResults(query, metadata) {
       const page = metadata?.page ?? 1;
-      let url = `${API}/?limit=${this.limit}&page=${page}`;
+      let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
       const Genres = [];
       const Types = [];
       const Order = [];
@@ -1761,7 +1761,7 @@ var _Sources = (() => {
     }
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
-        url: `${API}/${mangaId}`,
+        url: `${API}/manga/${mangaId}`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
@@ -1776,7 +1776,7 @@ var _Sources = (() => {
     }
     async getChapters(mangaId) {
       const request = App.createRequest({
-        url: `${API}/${mangaId}`,
+        url: `${API}/manga/${mangaId}/chapters`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
@@ -1791,7 +1791,7 @@ var _Sources = (() => {
     }
     async getChapterDetails(mangaId, chapterId) {
       const request = App.createRequest({
-        url: `${API}/${mangaId}/chapter/${chapterId}`,
+        url: `${API}/manga/${mangaId}/chapters/${chapterId}`,
         method: "GET"
       });
       const response = await this.requestManager.schedule(request, 1);
