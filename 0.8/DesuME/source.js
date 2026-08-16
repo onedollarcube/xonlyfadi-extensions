@@ -1263,6 +1263,7 @@ var _Sources = (() => {
 
  var parseMangaDetails = (data, mangaId) => {
   const details = data?.manga;
+
   if (!details) {
     throw new Error("Manga data not found");
   }
@@ -1283,10 +1284,18 @@ var _Sources = (() => {
     details?.cover?.x120 ||
     "";
 
+  const authors = (details?.authors ?? [])
+    .map((author) => {
+      if (typeof author === "string") return author;
+      return author?.name ?? "";
+    })
+    .filter(Boolean)
+    .join(", ");
+
   const arrayTags = [];
 
   for (const genre of details?.genres ?? []) {
-    const id = genre?.slug ?? String(genre?.genre_id ?? "");
+    const id = genre?.slug || String(genre?.genre_id ?? "");
     const label = genre?.name ?? "";
 
     if (!id || !label) continue;
@@ -1299,31 +1308,15 @@ var _Sources = (() => {
 
   let status = "ONGOING";
 
-  switch (details?.trans_status) {
-    case "completed":
-      status = "COMPLETED";
-      break;
-
-    case "continued":
-      status = "ONGOING";
-      break;
-
-    default:
-      switch (details?.status) {
-        case "released":
-          status = "COMPLETED";
-          break;
-
-        case "ongoing":
-          status = "ONGOING";
-          break;
-      }
+  if (details?.trans_status === "completed") {
+    status = "COMPLETED";
+  } else if (details?.trans_status === "continued") {
+    status = "ONGOING";
+  } else if (details?.status === "released") {
+    status = "COMPLETED";
+  } else if (details?.status === "ongoing") {
+    status = "ONGOING";
   }
-
-  const authors = (details?.authors ?? [])
-    .map((author) => author?.name ?? author)
-    .filter(Boolean)
-    .join(", ");
 
   return App.createSourceManga({
     id: `${mangaId}`,
@@ -1335,14 +1328,12 @@ var _Sources = (() => {
       tags: [
         App.createTagSection({
           id: "genres",
-          label: "Жанры",
+          label: "genres",
           tags: arrayTags.map((x) => App.createTag(x))
         })
       ],
       desc: details?.description ?? "",
-      hentai:
-        details?.content_rating === "adult" ||
-        details?.adult === 1
+      hentai: details?.content_rating === "adult"
     })
   });
 };
@@ -1754,7 +1745,14 @@ var _Sources = (() => {
         throw new Error(JSON.stringify(e));
       }
       const manga = parseSearch(data);
-      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
+
+      const pagination = data?.pagination;
+      metadata =
+        pagination &&
+        pagination.current_page < pagination.last_page
+          ? { page: pagination.current_page + 1 }
+          : void 0;
+
       return App.createPagedResults({
         results: manga,
         metadata
@@ -1804,7 +1802,14 @@ var _Sources = (() => {
         throw new Error(JSON.stringify(e));
       }
       const manga = parseSearch(data);
-      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
+
+      const pagination = data?.pagination;
+      metadata =
+        pagination &&
+        pagination.current_page < pagination.last_page
+          ? { page: pagination.current_page + 1 }
+          : void 0;
+
       return App.createPagedResults({
         results: manga,
         metadata
