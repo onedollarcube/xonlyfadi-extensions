@@ -1710,104 +1710,164 @@ var _Sources = (() => {
       });
     }
 async getSearchResults(query, metadata) {
-  const page = metadata?.page ?? 1;
-  const q = query?.title?.trim();
+    const q = query?.title?.trim();
 
-  if (!q) {
-    return App.createPagedResults({
-      results: [],
-      metadata: void 0
-    });
-  }
-
-  const request = App.createRequest({
-    url: `${API}/manga/search/`,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: `q=${encodeURIComponent(q)}&type=manga`
-  });
-
-  const response = await this.requestManager.schedule(request, 1);
-  this.CloudFlareError(response.status);
-
-  let data;
-  try {
-    data = JSON.parse(response.data);
-  } catch (e) {
-    throw new Error(JSON.stringify(e));
-  }
-
-  const html = data?.templateHtml ?? "";
-  const results = [];
-
-  const cardRegex =
-    /<li[^>]*class="[^"]*AniMangaSearchCard[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
-
-  let match;
-
-  while ((match = cardRegex.exec(html)) !== null) {
-    const card = match[1];
-
-    const hrefMatch = card.match(
-      /<a[^>]*href="([^"]*manga\/[^"]+)"[^>]*>/
-    );
-
-    const imageMatch = card.match(
-      /<img[^>]*src="([^"]+)"/
-    );
-
-    const titleMatch = card.match(
-      /class="AniMangaSearchCard__title"[^>]*>([\s\S]*?)<\/span>/
-    );
-
-    const subtitleMatch = card.match(
-      /class="AniMangaSearchCard__subtitle"[^>]*>([\s\S]*?)<\/span>/
-    );
-
-    if (!hrefMatch) {
-      continue;
+    if (!q) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
     }
 
-    const href = hrefMatch[1];
-    const idMatch = href.match(/\.([0-9]+)\/?$/);
+    // Получаем главную страницу Desu и актуальный XenForo token
+    const mainPage = await this.request("https://desu.uno/");
 
-    if (!idMatch) {
-      continue;
+    if (!mainPage) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
     }
 
-    const mangaId = idMatch[1];
-
-    const clean = (value) =>
-      value
-        ? value.replace(/<[^>]+>/g, "").trim()
-        : "";
-
-    const title = clean(titleMatch?.[1]);
-    const subtitle = clean(subtitleMatch?.[1]);
-    const image = imageMatch?.[1] || "";
-
-    results.push(
-      App.createSourceManga({
-        id: mangaId,
-        mangaInfo: App.createMangaInfo({
-          titles: [
-            title || subtitle
-          ],
-          image,
-          status: "ONGOING",
-          desc: "",
-          hentai: false
-        })
-      })
+    const tokenMatch = mainPage.match(
+        /<input[^>]+name=["']_xfToken["'][^>]+value=["']([^"']+)["']/i
     );
-  }
 
-  return App.createPagedResults({
-    results,
-    metadata: void 0
-  });
+    if (!tokenMatch) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
+    }
+
+    const xfToken = tokenMatch[1];
+
+    const body = new URLSearchParams({
+        q: q,
+        type: "manga",
+        _xfToken: xfToken,
+        _xfRequestUri: "/",
+        _xfNoRedirect: "1",
+        _xfResponseType: "json",
+    }).toString();
+
+    const response = await this.request(
+        "https://desu.uno/manga/search/",
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            body,
+        }
+    );
+
+    const html = response?.templateHtml || "";
+
+    if (!html) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
+    }
+
+    const entries = [];
+
+    const cardRegex =
+        /<li[^>]*class=["'][^"']*AniMangaSearchCard[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi;
+
+    const clean = (value) => {
+        if (!value) {
+            return "";
+        }
+
+        return value
+            .replace(/<[^>]+>/g, "")
+            .replace(/&amp;/g, "&")
+            .replace(/&quot;/g, '"')
+            .replace(/&#039;/g, "'")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">")
+            .trim();
+    };
+
+    let match;
+
+    while ((match = cardRegex.exec(html)) !== null) {
+        const card = match[1];
+
+        const hrefMatch = card.match(
+            /<a[^>]+class=["'][^"']*AniMangaSearchCard__link[^"']*["'][^>]+href=["']([^"']+)["']/i
+        );
+
+        const imageMatch = card.match(
+            /<img[^>]+class=["'][^"']*AniMangaSearchCard__cover[^"']*["'][^>]+src=["']([^"']+)["']/i
+        );
+
+        const titleMatch = card.match(
+            /class=["'][^"']*AniMangaSearchCard__title[^"']*["'][^>]*>([\s\S]*?)<\/span>/i
+        );
+
+        const subtitleMatch = card.match(
+            /class=["'][^"']*AniMangaSearchCard__subtitle[^"']*["'][^>]*>([\s\S]*?)<\/span>/i
+        );
+
+        if (!hrefMatch) {
+            continue;
+        }
+
+        const href = hrefMatch[1];
+
+        // manga/super-god-gene.4445/
+        const idMatch = href.match(/\.([0-9]+)\/?$/);
+
+        if (!idMatch) {
+            continue;
+        }
+
+        const mangaId = idMatch[1];
+
+        let image = imageMatch?.[1] || "";
+
+        // На всякий случай делаем абсолютный URL
+        if (image && image.startsWith("/")) {
+            image = `https://desu.uno${image}`;
+        }
+
+        const title = clean(titleMatch?.[1]);
+        const subtitle = clean(subtitleMatch?.[1]);
+
+        entries.push(
+            App.createMangaInfo({
+                id: mangaId,
+                title: title || subtitle,
+                image: image,
+                subtitle: subtitle,
+                metadata: metadata || {},
+            })
+        );
+    }
+
+    /*
+     * Paperback ожидает metadata с параметрами навигации.
+     * Поиск Desu не отдаёт pagination, поэтому задаём её сами.
+     */
+    const resultMetadata = {
+        ...(metadata || {}),
+        pageNavParams: {
+            ...(metadata?.pageNavParams || {}),
+            count: entries.length,
+            page: 1,
+            pageSize: entries.length,
+            total: entries.length,
+        },
+    };
+
+    return {
+        entries,
+        metadata: resultMetadata,
+    };
 }
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
