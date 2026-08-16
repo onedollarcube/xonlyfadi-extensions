@@ -1710,55 +1710,93 @@ var _Sources = (() => {
       });
     }
     async getSearchResults(query, metadata) {
-      const page = metadata?.page ?? 1;
-      let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
-      const Genres = [];
-      const Types = [];
-      const Order = [];
-      query.includedTags?.map((x) => {
-        const id = x?.id;
-        const SplittedID = id?.split(".")?.pop() ?? "";
-        if (id.includes("genres.")) {
-          Genres.push(SplittedID);
-        }
-        if (id.includes("types.")) {
-          Types.push(SplittedID);
-        }
-        if (id.includes("order.")) {
-          Order.push(SplittedID);
-        }
-      });
-      if (query?.title) {
-        url += `&search=${query?.title.replace(/ /g, "+").replace(/%20/g, "+")}`;
-      }
-      if (Genres?.length > 0) {
-        url += `&genres=${Genres.join(",")}`;
-      }
-      if (Types?.length > 0) {
-        url += `&kinds=${Types.join(",")}`;
-      }
-      if (Order?.length > 0) {
-        url += `&order=${Order[0]}`;
-      }
-      const request = App.createRequest({
-        url,
-        method: "GET"
-      });
-      const response = await this.requestManager.schedule(request, 1);
-      this.CloudFlareError(response.status);
-      let data;
-      try {
-        data = JSON.parse(response.data);
-      } catch (e) {
-        throw new Error(JSON.stringify(e));
-      }
-      const manga = parseSearch(data);
-      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
-      return App.createPagedResults({
-        results: manga,
-        metadata
-      });
+    const q = query?.title?.trim();
+
+    if (!q) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
     }
+
+    const response = await this.request(
+        `${BASE_URL}/manga/search/`,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: `q=${encodeURIComponent(q)}&type=manga`,
+        }
+    );
+
+    const html = response?.templateHtml || "";
+
+    if (!html) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
+    }
+
+    const entries = [];
+    const cardRegex = /<li[^>]*class="[^"]*AniMangaSearchCard[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+
+    let match;
+
+    while ((match = cardRegex.exec(html)) !== null) {
+        const card = match[1];
+
+        const hrefMatch = card.match(
+            /<a[^>]*href="([^"]*manga\/[^"]+)"[^>]*>/
+        );
+
+        const imageMatch = card.match(
+            /<img[^>]*src="([^"]+)"/
+        );
+
+        const titleMatch = card.match(
+            /class="AniMangaSearchCard__title"[^>]*>([\s\S]*?)<\/span>/
+        );
+
+        const subtitleMatch = card.match(
+            /class="AniMangaSearchCard__subtitle"[^>]*>([\s\S]*?)<\/span>/
+        );
+
+        if (!hrefMatch) {
+            continue;
+        }
+
+        const href = hrefMatch[1];
+        const idMatch = href.match(/\.([0-9]+)\/?$/);
+
+        if (!idMatch) {
+            continue;
+        }
+
+        const mangaId = idMatch[1];
+
+        const clean = (value) =>
+            value
+                ? value.replace(/<[^>]+>/g, "").trim()
+                : "";
+
+        entries.push(
+            App.createMangaInfo({
+                id: mangaId,
+                title: clean(titleMatch?.[1]) || clean(subtitleMatch?.[1]),
+                image: imageMatch?.[1] || "",
+                subtitle: clean(subtitleMatch?.[1]),
+                metadata: metadata || {},
+            })
+        );
+    }
+
+    return {
+        entries,
+        metadata: metadata || {},
+    };
+}
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
         url: `${API}/manga/${mangaId}`,
