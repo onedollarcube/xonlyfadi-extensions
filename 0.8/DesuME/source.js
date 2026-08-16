@@ -1246,59 +1246,77 @@ var _Sources = (() => {
     }
     return results;
   };
-  var parseMangaDetails = (data, mangaId) => {
-    const details = data.manga;                     // ← data.response → data.manga
+var parseMangaDetails = (data, mangaId) => {
+    const details = data.manga;
+
     const titles = [];
-    if (details?.name) titles.push(details?.name.trim());
-    if (details?.russian) titles.push(details?.russian.trim());
-    const image = details?.cover?.preview || "";
+    if (details?.name) titles.push(details.name.trim());
+    if (details?.russian) titles.push(details.russian.trim());
+
+    const image = details.cover.preview ? details.cover.preview : "";
+
     const author = details.authors ?? "";
+
     const arrayTags = [];
+
     if (details?.genres) {
-      for (const category of details.genres ?? []) {
-        const id = category.slug || String(category.genre_id);
-        const label = category?.name ?? "";
-        if (!id || !label)
-          continue;
-        arrayTags.push({
-          id: `genres.${id}`,
-          label
-        });
-      }
+        for (const category of details.genres) {
+            const id = category.slug ?? "";
+            const label = category.name ?? "";
+
+            if (!id || !label)
+                continue;
+
+            arrayTags.push({
+                id: `genres.${id}`,
+                label
+            });
+        }
     }
+
     let status = "ONGOING";
+
     if (details?.trans_status) {
-      switch (details?.trans_status) {
-        case "continued":
-          status = "ONGOING";
-          break;
-        case "completed":
-          status = "COMPLETED";
-          break;
-      }
+        switch (details.trans_status) {
+            case "continued":
+                status = "ONGOING";
+                break;
+
+            case "completed":
+                status = "COMPLETED";
+                break;
+        }
     } else if (details?.status) {
-      switch (details?.status) {
-        case "ongoing":
-          status = "ONGOING";
-          break;
-        case "released":
-          status = "COMPLETED";
-          break;
-      }
+        switch (details.status) {
+            case "ongoing":
+                status = "ONGOING";
+                break;
+
+            case "released":
+                status = "COMPLETED";
+                break;
+        }
     }
+
     return App.createSourceManga({
-      id: mangaId,
-      mangaInfo: App.createMangaInfo({
-        titles,
-        image,
-        status,
-        author,
-        tags: [App.createTagSection({ id: "0", label: "genres", tags: arrayTags.map((x) => App.createTag(x)) })],
-        desc: details?.description ? details?.description : "",
-        hentai: details.adult === 1
-      })
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+            titles,
+            image,
+            status,
+            author,
+            tags: [
+                App.createTagSection({
+                    id: "0",
+                    label: "genres",
+                    tags: arrayTags.map((x) => App.createTag(x))
+                })
+            ],
+            desc: details?.description ? details.description : "",
+            hentai: false
+        })
     });
-  };
+};
   var parseChapters = (data) => {
     const chapters = [];
     let sortingIndex = 0;
