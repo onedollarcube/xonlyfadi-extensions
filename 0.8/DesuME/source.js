@@ -1729,12 +1729,11 @@ var parseMangaDetails = (data, mangaId) => {
     }
     async getSearchResults(query, metadata) {
     const page = metadata?.page ?? 1;
-    const title = query?.title?.trim() ?? "";
 
     let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
 
-    if (title) {
-        url += `&search=${encodeURIComponent(title)}`;
+    if (query?.title) {
+        url += `&search=${query.title.replace(/ /g, "+").replace(/%20/g, "+")}`;
     }
 
     const request = App.createRequest({
@@ -1761,12 +1760,13 @@ var parseMangaDetails = (data, mangaId) => {
                 titles: [
                     item.name ?? "",
                     item.russian ?? ""
-                ].filter(Boolean),
+                ].filter((x) => x),
                 image: item.cover?.preview ?? "",
-                desc: "",
                 status: item.status === "released"
                     ? "COMPLETED"
-                    : "ONGOING"
+                    : "ONGOING",
+                author: "",
+                desc: ""
             })
         );
     }
@@ -1776,9 +1776,7 @@ var parseMangaDetails = (data, mangaId) => {
     metadata =
         pagination &&
         pagination.current_page < pagination.last_page
-            ? {
-                page: pagination.current_page + 1
-            }
+            ? { page: pagination.current_page + 1 }
             : void 0;
 
     return App.createPagedResults({
