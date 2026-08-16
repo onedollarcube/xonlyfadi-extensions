@@ -1731,73 +1731,58 @@ var parseMangaDetails = (data, mangaId) => {
     const page = metadata?.page ?? 1;
     const search = query?.title?.trim()?.toLowerCase() ?? "";
 
-    const results = [];
-    let currentPage = page;
-    let lastPage = 192;
+    const url = `${API}/manga/catalog?limit=30&page=${page}`;
 
-    while (currentPage <= lastPage) {
-        const url = `${API}/manga/catalog?limit=30&page=${currentPage}`;
+    const request = App.createRequest({
+        url,
+        method: "GET"
+    });
 
-        const request = App.createRequest({
-            url,
-            method: "GET"
-        });
+    const response = await this.requestManager.schedule(request, 1);
+    this.CloudFlareError(response.status);
 
-        const response = await this.requestManager.schedule(request, 1);
-        this.CloudFlareError(response.status);
+    let data;
 
-        let data;
-
-        try {
-            data = JSON.parse(response.data);
-        } catch (e) {
-            throw new Error(JSON.stringify(e));
-        }
-
-        const mangas = data?.mangas ?? [];
-
-        lastPage = data?.pagination?.last_page ?? lastPage;
-
-        for (const manga of mangas) {
-            const name = String(manga?.name ?? "").toLowerCase();
-            const russian = String(manga?.russian ?? "").toLowerCase();
-
-            if (
-                !search ||
-                name.includes(search) ||
-                russian.includes(search)
-            ) {
-                results.push(
-                    App.createMangaInfo({
-                        id: String(manga.id),
-                        title: manga.russian || manga.name,
-                        image: manga?.cover?.preview || "",
-                        subtitle:
-                            manga.russian && manga.name !== manga.russian
-                                ? manga.name
-                                : "",
-                    })
-                );
-            }
-        }
-
-        // Если нашли результаты — отдаём их.
-        // Следующая страница здесь уже не нужна.
-        if (results.length > 0) {
-            break;
-        }
-
-        currentPage++;
+    try {
+        data = JSON.parse(response.data);
+    } catch (e) {
+        throw new Error(JSON.stringify(e));
     }
 
-    const nextMetadata =
-        results.length === 0 && currentPage < lastPage
-            ? { page: currentPage + 1 }
+    const manga = [];
+
+    for (const item of data?.mangas ?? []) {
+        const name = String(item?.name ?? "");
+        const russian = String(item?.russian ?? "");
+
+        if (
+            !name.toLowerCase().includes(search) &&
+            !russian.toLowerCase().includes(search)
+        ) {
+            continue;
+        }
+
+        manga.push(
+            App.createMangaInfo({
+                id: String(item.id),
+                title: russian || name,
+                image: item?.cover?.preview || "",
+                subtitle: russian && name !== russian ? name : ""
+            })
+        );
+    }
+
+    const pagination = data?.pagination;
+
+    metadata =
+        pagination &&
+        pagination.current_page < pagination.last_page
+            ? { page: pagination.current_page + 1 }
             : void 0;
 
     return App.createPagedResults({
-        results,
-        metadata: nextMetadata
+        results: manga,
+        metadata
     });
 }
     async getMangaDetails(mangaId) {
