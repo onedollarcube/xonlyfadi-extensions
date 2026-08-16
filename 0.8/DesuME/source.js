@@ -1234,7 +1234,7 @@ var _Sources = (() => {
     for (const obj of data.mangas ?? []) {  // ← data.response → data.mangas
       const id = obj?.id ?? "";
       const title = obj?.russian || obj?.name || ""; // лучше брать russian
-      const image = obj?.cover?.preview || obj?.cover?.snippet || "";
+      const image = obj.cover.preview ? obj.cover.preview : "";
       const subtitle = "";                          // в новом API нет chapters.updated
       if (!id) continue;
       results.push(App.createPartialSourceManga({
