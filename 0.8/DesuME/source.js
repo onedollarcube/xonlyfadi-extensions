@@ -1709,93 +1709,105 @@ var _Sources = (() => {
         metadata
       });
     }
-    async getSearchResults(query, metadata) {
-    const q = query?.title?.trim();
+async getSearchResults(query, metadata) {
+  const page = metadata?.page ?? 1;
+  const q = query?.title?.trim();
 
-    if (!q) {
-        return {
-            entries: [],
-            metadata: metadata || {},
-        };
-    }
+  if (!q) {
+    return App.createPagedResults({
+      results: [],
+      metadata: void 0
+    });
+  }
 
-    const response = await this.request(
-        `${BASE_URL}/manga/search/`,
-        {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: `q=${encodeURIComponent(q)}&type=manga`,
-        }
+  const request = App.createRequest({
+    url: `${API}/manga/search/`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: `q=${encodeURIComponent(q)}&type=manga`
+  });
+
+  const response = await this.requestManager.schedule(request, 1);
+  this.CloudFlareError(response.status);
+
+  let data;
+  try {
+    data = JSON.parse(response.data);
+  } catch (e) {
+    throw new Error(JSON.stringify(e));
+  }
+
+  const html = data?.templateHtml ?? "";
+  const results = [];
+
+  const cardRegex =
+    /<li[^>]*class="[^"]*AniMangaSearchCard[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+
+  let match;
+
+  while ((match = cardRegex.exec(html)) !== null) {
+    const card = match[1];
+
+    const hrefMatch = card.match(
+      /<a[^>]*href="([^"]*manga\/[^"]+)"[^>]*>/
     );
 
-    const html = response?.templateHtml || "";
+    const imageMatch = card.match(
+      /<img[^>]*src="([^"]+)"/
+    );
 
-    if (!html) {
-        return {
-            entries: [],
-            metadata: metadata || {},
-        };
+    const titleMatch = card.match(
+      /class="AniMangaSearchCard__title"[^>]*>([\s\S]*?)<\/span>/
+    );
+
+    const subtitleMatch = card.match(
+      /class="AniMangaSearchCard__subtitle"[^>]*>([\s\S]*?)<\/span>/
+    );
+
+    if (!hrefMatch) {
+      continue;
     }
 
-    const entries = [];
-    const cardRegex = /<li[^>]*class="[^"]*AniMangaSearchCard[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+    const href = hrefMatch[1];
+    const idMatch = href.match(/\.([0-9]+)\/?$/);
 
-    let match;
-
-    while ((match = cardRegex.exec(html)) !== null) {
-        const card = match[1];
-
-        const hrefMatch = card.match(
-            /<a[^>]*href="([^"]*manga\/[^"]+)"[^>]*>/
-        );
-
-        const imageMatch = card.match(
-            /<img[^>]*src="([^"]+)"/
-        );
-
-        const titleMatch = card.match(
-            /class="AniMangaSearchCard__title"[^>]*>([\s\S]*?)<\/span>/
-        );
-
-        const subtitleMatch = card.match(
-            /class="AniMangaSearchCard__subtitle"[^>]*>([\s\S]*?)<\/span>/
-        );
-
-        if (!hrefMatch) {
-            continue;
-        }
-
-        const href = hrefMatch[1];
-        const idMatch = href.match(/\.([0-9]+)\/?$/);
-
-        if (!idMatch) {
-            continue;
-        }
-
-        const mangaId = idMatch[1];
-
-        const clean = (value) =>
-            value
-                ? value.replace(/<[^>]+>/g, "").trim()
-                : "";
-
-        entries.push(
-            App.createMangaInfo({
-                id: mangaId,
-                title: clean(titleMatch?.[1]) || clean(subtitleMatch?.[1]),
-                image: imageMatch?.[1] || "",
-                subtitle: clean(subtitleMatch?.[1]),
-                metadata: metadata || {},
-            })
-        );
+    if (!idMatch) {
+      continue;
     }
 
-    return {
-        entries,
-        metadata: metadata || {},
-    };
+    const mangaId = idMatch[1];
+
+    const clean = (value) =>
+      value
+        ? value.replace(/<[^>]+>/g, "").trim()
+        : "";
+
+    const title = clean(titleMatch?.[1]);
+    const subtitle = clean(subtitleMatch?.[1]);
+    const image = imageMatch?.[1] || "";
+
+    results.push(
+      App.createSourceManga({
+        id: mangaId,
+        mangaInfo: App.createMangaInfo({
+          titles: [
+            title || subtitle
+          ],
+          image,
+          status: "ONGOING",
+          desc: "",
+          hentai: false
+        })
+      })
+    );
+  }
+
+  return App.createPagedResults({
+    results,
+    metadata: void 0
+  });
 }
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
