@@ -1728,80 +1728,97 @@ var parseMangaDetails = (data, mangaId) => {
       });
     }
     async getSearchResults(query, metadata) {
-    const page = metadata?.page ?? 1;
+    const q = query?.title?.trim();
 
-    let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
+    if (!q) {
+        return {
+            entries: [],
+            metadata: metadata || {},
+        };
+    }
 
-    const genres = [];
-    const types = [];
-    const orders = [];
+    const search = q.toLowerCase();
+    const entries = [];
+    const seen = new Set();
 
-    for (const tag of query?.includedTags ?? []) {
-        const id = tag?.id ?? "";
-        const value = id.split(".").pop() ?? "";
+    const maxPages = 192;
 
-        if (id.startsWith("genres.")) {
-            genres.push(value);
+    for (let page = 1; page <= maxPages; page++) {
+        const request = App.createRequest({
+            url: `${API}/manga/catalog?limit=30&page=${page}`,
+            method: "GET"
+        });
+
+        const response = await this.requestManager.schedule(request, 1);
+
+        this.CloudFlareError(response.status);
+
+        let data;
+
+        try {
+            data = JSON.parse(response.data);
+        } catch (e) {
+            continue;
         }
 
-        if (id.startsWith("types.")) {
-            types.push(value);
-        }
+        const mangas = data?.mangas || [];
 
-        if (id.startsWith("order.")) {
-            orders.push(value);
-        }
-    }
+        for (const manga of mangas) {
+            const name = (manga?.name || "").trim();
+            const russian = (manga?.russian || "").trim();
 
-    if (query?.title?.trim()) {
-        url += `&search=${encodeURIComponent(query.title.trim())}`;
-    }
+            const nameLower = name.toLowerCase();
+            const russianLower = russian.toLowerCase();
 
-    if (genres.length > 0) {
-        url += `&genres=${genres.join(",")}`;
-    }
-
-    if (types.length > 0) {
-        url += `&kinds=${types.join(",")}`;
-    }
-
-    if (orders.length > 0) {
-        url += `&order=${orders[0]}`;
-    }
-
-    const request = App.createRequest({
-        url,
-        method: "GET"
-    });
-
-    const response = await this.requestManager.schedule(request, 1);
-
-    this.CloudFlareError(response.status);
-
-    let data;
-
-    try {
-        data = JSON.parse(response.data);
-    } catch (e) {
-        throw new Error(JSON.stringify(e));
-    }
-
-    const manga = parseSearch(data);
-
-    const pagination = data?.pagination;
-
-    const nextMetadata =
-        pagination &&
-        pagination.current_page < pagination.last_page
-            ? {
-                page: pagination.current_page + 1
+            if (
+                !nameLower.includes(search) &&
+                !russianLower.includes(search)
+            ) {
+                continue;
             }
-            : undefined;
 
-    return App.createPagedResults({
-        results: manga,
-        metadata: nextMetadata
-    });
+            const id = String(manga.id);
+
+            if (seen.has(id)) {
+                continue;
+            }
+
+            seen.add(id);
+
+            entries.push(
+                App.createMangaInfo({
+                    id,
+                    title: russian || name,
+                    image: manga?.cover?.preview || "",
+                    subtitle: russian && name !== russian ? name : "",
+                    metadata: metadata || {},
+                })
+            );
+        }
+
+        // Если нашли результаты — возвращаем их сразу.
+        // Не нужно сканировать остальные 192 страницы.
+        if (entries.length > 0) {
+            break;
+        }
+
+        // Используем реальное количество страниц из API.
+        const lastPage = data?.pagination?.last_page;
+
+        if (lastPage && page >= lastPage) {
+            break;
+        }
+
+        // Если API внезапно вернул пустую страницу — прекращаем поиск.
+        if (!mangas.length) {
+            break;
+        }
+    }
+
+    return {
+        entries,
+        metadata: metadata || {},
+    };
 }
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
