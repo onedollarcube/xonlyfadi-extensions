@@ -1229,76 +1229,124 @@ var _Sources = (() => {
   })(EncodingMode || (EncodingMode = {}));
 
   // src/DesuME/DesuMEParser.ts
-  var parseSearch = (data) => {
-    const results = [];
-    for (const obj of data.mangas ?? []) {  // ← data.response → data.mangas
-      const id = obj?.id ?? "";
-      const title = obj?.russian || obj?.name || ""; // лучше брать russian
-      const image = obj?.cover?.preview || obj?.cover?.snippet || "";
-      const subtitle = "";                          // в новом API нет chapters.updated
-      if (!id) continue;
-      results.push(App.createPartialSourceManga({
+ var parseSearch = (data) => {
+  const results = [];
+
+  for (const obj of data?.mangas ?? []) {
+    if (!obj?.id) continue;
+
+    const title =
+      obj?.russian?.trim() ||
+      obj?.name?.trim() ||
+      "Без названия";
+
+    const image =
+      obj?.cover?.preview ||
+      obj?.cover?.snippet ||
+      obj?.cover?.x120 ||
+      "";
+
+    results.push(
+      App.createPartialSourceManga({
+        mangaId: `${obj.id}`,
         title: decodeHTML(title),
         image,
-        mangaId: `${id}`,
-        subtitle: subtitle ? `\u0413\u043B\u0430\u0432\u0430 ${subtitle}` : ""
-      }));
-    }
-    return results;
-  };
-  var parseMangaDetails = (data, mangaId) => {
-    const details = data.manga;                     // ← data.response → data.manga
-    const titles = [];
-    if (details?.name) titles.push(details?.name.trim());
-    if (details?.russian) titles.push(details?.russian.trim());
-    const image = details?.cover?.preview || details?.cover?.snippet || "";
-    const author = details.authors ?? "";
-    const arrayTags = [];
-    if (details?.genres) {
-      for (const category of details.genres ?? []) {
-        const id = category.slug || String(category.genre_id);
-        const label = category?.name ?? "";
-        if (!id || !label)
-          continue;
-        arrayTags.push({
-          id: `genres.${id}`,
-          label
-        });
-      }
-    }
-    let status = "ONGOING";
-    if (details?.trans_status) {
-      switch (details?.trans_status) {
-        case "continued":
-          status = "ONGOING";
-          break;
-        case "completed":
-          status = "COMPLETED";
-          break;
-      }
-    } else if (details?.status) {
+        subtitle: obj?.name && obj?.russian
+          ? decodeHTML(obj.name)
+          : ""
+      })
+    );
+  }
+
+  return results;
+};
+
+ var parseMangaDetails = (data, mangaId) => {
+  const details = data?.manga;
+  if (!details) {
+    throw new Error("Manga data not found");
+  }
+
+  const titles = [];
+
+  if (details.name) {
+    titles.push(details.name.trim());
+  }
+
+  if (details.russian && details.russian.trim() !== details.name?.trim()) {
+    titles.push(details.russian.trim());
+  }
+
+  const image =
+    details?.cover?.preview ||
+    details?.cover?.snippet ||
+    details?.cover?.x120 ||
+    "";
+
+  const arrayTags = [];
+
+  for (const genre of details?.genres ?? []) {
+    const id = genre?.slug ?? String(genre?.genre_id ?? "");
+    const label = genre?.name ?? "";
+
+    if (!id || !label) continue;
+
+    arrayTags.push({
+      id: `genres.${id}`,
+      label
+    });
+  }
+
+  let status = "ONGOING";
+
+  switch (details?.trans_status) {
+    case "completed":
+      status = "COMPLETED";
+      break;
+
+    case "continued":
+      status = "ONGOING";
+      break;
+
+    default:
       switch (details?.status) {
-        case "ongoing":
-          status = "ONGOING";
-          break;
         case "released":
           status = "COMPLETED";
           break;
+
+        case "ongoing":
+          status = "ONGOING";
+          break;
       }
-    }
-    return App.createSourceManga({
-      id: mangaId,
-      mangaInfo: App.createMangaInfo({
-        titles,
-        image,
-        status,
-        author,
-        tags: [App.createTagSection({ id: "0", label: "genres", tags: arrayTags.map((x) => App.createTag(x)) })],
-        desc: details?.description ? details?.description : "",
-        hentai: details.adult === 1
-      })
-    });
-  };
+  }
+
+  const authors = (details?.authors ?? [])
+    .map((author) => author?.name ?? author)
+    .filter(Boolean)
+    .join(", ");
+
+  return App.createSourceManga({
+    id: `${mangaId}`,
+    mangaInfo: App.createMangaInfo({
+      titles,
+      image,
+      status,
+      author: authors,
+      tags: [
+        App.createTagSection({
+          id: "genres",
+          label: "Жанры",
+          tags: arrayTags.map((x) => App.createTag(x))
+        })
+      ],
+      desc: details?.description ?? "",
+      hentai:
+        details?.content_rating === "adult" ||
+        details?.adult === 1
+    })
+  });
+};
+
   var parseChapters = (data) => {
     const chapters = [];
     let sortingIndex = 0;
@@ -1326,19 +1374,22 @@ var _Sources = (() => {
       return App.createChapter(chapter);
     });
   };
-  var parseChapterDetails = (data, mangaId, chapterId) => {
-    const pages = [];
-    for (const page of data.chapter?.pages ?? []) {  // ← data.response.pages.list → data.chapter.pages
-      const url = page.url ?? "";
-      if (!url) continue;
-      pages.push(url);
-    }
-    return App.createChapterDetails({
-      id: chapterId,
-      mangaId,
-      pages
-    });
-  };
+  var parseChapterDetails = (data) => {
+  const chapter = data?.chapter;
+
+  if (!chapter) {
+    throw new Error("Chapter data not found");
+  }
+
+  const pages = (chapter.pages ?? [])
+    .filter((page) => page?.url)
+    .sort((a, b) => (a.page ?? 0) - (b.page ?? 0))
+    .map((page) => page.url);
+
+  return App.createChapterDetails({
+    pages
+  });
+};
   var parseTags = () => {
     const Genres = [
       {
