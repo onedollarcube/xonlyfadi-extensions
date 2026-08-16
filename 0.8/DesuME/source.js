@@ -1729,9 +1729,18 @@ var parseMangaDetails = (data, mangaId) => {
     }
     async getSearchResults(query, metadata) {
     const page = metadata?.page ?? 1;
-    const search = query?.title?.trim()?.toLowerCase() ?? "";
+    const title = query?.title?.trim();
 
-    const url = `${API}/manga/catalog?limit=30&page=${page}`;
+    if (!title) {
+        return App.createPagedResults({
+            results: [],
+            metadata: undefined
+        });
+    }
+
+    const url =
+        `${API}/manga/catalog?limit=${this.limit}&page=${page}` +
+        `&search=${encodeURIComponent(title).replace(/%20/g, "+")}`;
 
     const request = App.createRequest({
         url,
@@ -1749,41 +1758,55 @@ var parseMangaDetails = (data, mangaId) => {
         throw new Error(JSON.stringify(e));
     }
 
-    const manga = [];
+    const results = [];
 
-    for (const item of data?.mangas ?? []) {
-        const name = String(item?.name ?? "");
-        const russian = String(item?.russian ?? "");
-
-        if (
-            !name.toLowerCase().includes(search) &&
-            !russian.toLowerCase().includes(search)
-        ) {
+    for (const manga of data.mangas ?? []) {
+        if (!manga?.id) {
             continue;
         }
 
-        manga.push(
+        const titles = [];
+
+        if (manga.name) {
+            titles.push(manga.name);
+        }
+
+        if (manga.russian && manga.russian !== manga.name) {
+            titles.push(manga.russian);
+        }
+
+        results.push(
             App.createMangaInfo({
-                id: String(item.id),
-                title: russian || name,
-                image: String(item?.cover?.preview ?? ""),
-                subtitle: russian && name !== russian ? name : "",
-                desc: ""
+                id: String(manga.id),
+                titles,
+                image: manga.cover?.preview ?? "",
+                status:
+                    manga.trans_status === "completed" ||
+                    manga.status === "released"
+                        ? "COMPLETED"
+                        : "ONGOING",
+                author: "",
+                desc: "",
+                hentai:
+                    manga.content_rating === "18+" ||
+                    manga.content_rating === "21+"
             })
         );
     }
 
-    const pagination = data?.pagination;
+    const pagination = data.pagination;
 
-    metadata =
+    const nextPage =
         pagination &&
         pagination.current_page < pagination.last_page
-            ? { page: page + 1 }
-            : void 0;
+            ? pagination.current_page + 1
+            : undefined;
 
     return App.createPagedResults({
-        results: manga,
-        metadata
+        results,
+        metadata: nextPage
+            ? { page: nextPage }
+            : undefined
     });
 }
     async getMangaDetails(mangaId) {
