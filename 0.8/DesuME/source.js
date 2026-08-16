@@ -1766,8 +1766,9 @@ var parseMangaDetails = (data, mangaId) => {
             App.createMangaInfo({
                 id: String(item.id),
                 title: russian || name,
-                image: item?.cover?.preview || "",
-                subtitle: russian && name !== russian ? name : ""
+                image: String(item?.cover?.preview ?? ""),
+                subtitle: russian && name !== russian ? name : "",
+                desc: ""
             })
         );
     }
@@ -1777,7 +1778,7 @@ var parseMangaDetails = (data, mangaId) => {
     metadata =
         pagination &&
         pagination.current_page < pagination.last_page
-            ? { page: pagination.current_page + 1 }
+            ? { page: page + 1 }
             : void 0;
 
     return App.createPagedResults({
