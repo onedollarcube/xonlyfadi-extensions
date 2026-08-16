@@ -1729,18 +1729,13 @@ var parseMangaDetails = (data, mangaId) => {
     }
     async getSearchResults(query, metadata) {
     const page = metadata?.page ?? 1;
-    const title = query?.title?.trim();
+    const title = query?.title?.trim() ?? "";
 
-    if (!title) {
-        return App.createPagedResults({
-            results: [],
-            metadata: undefined
-        });
+    let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
+
+    if (title) {
+        url += `&search=${encodeURIComponent(title)}`;
     }
-
-    const url =
-        `${API}/manga/catalog?limit=${this.limit}&page=${page}` +
-        `&search=${encodeURIComponent(title).replace(/%20/g, "+")}`;
 
     const request = App.createRequest({
         url,
@@ -1751,62 +1746,44 @@ var parseMangaDetails = (data, mangaId) => {
     this.CloudFlareError(response.status);
 
     let data;
-
     try {
         data = JSON.parse(response.data);
     } catch (e) {
         throw new Error(JSON.stringify(e));
     }
 
-    const results = [];
+    const manga = [];
 
-    for (const manga of data.mangas ?? []) {
-        if (!manga?.id) {
-            continue;
-        }
-
-        const titles = [];
-
-        if (manga.name) {
-            titles.push(manga.name);
-        }
-
-        if (manga.russian && manga.russian !== manga.name) {
-            titles.push(manga.russian);
-        }
-
-        results.push(
+    for (const item of data.mangas ?? []) {
+        manga.push(
             App.createMangaInfo({
-                id: String(manga.id),
-                titles,
-                image: manga.cover?.preview ?? "",
-                status:
-                    manga.trans_status === "completed" ||
-                    manga.status === "released"
-                        ? "COMPLETED"
-                        : "ONGOING",
-                author: "",
+                id: String(item.id),
+                titles: [
+                    item.name ?? "",
+                    item.russian ?? ""
+                ].filter(Boolean),
+                image: item.cover?.preview ?? "",
                 desc: "",
-                hentai:
-                    manga.content_rating === "18+" ||
-                    manga.content_rating === "21+"
+                status: item.status === "released"
+                    ? "COMPLETED"
+                    : "ONGOING"
             })
         );
     }
 
     const pagination = data.pagination;
 
-    const nextPage =
+    metadata =
         pagination &&
         pagination.current_page < pagination.last_page
-            ? pagination.current_page + 1
-            : undefined;
+            ? {
+                page: pagination.current_page + 1
+            }
+            : void 0;
 
     return App.createPagedResults({
-        results,
-        metadata: nextPage
-            ? { page: nextPage }
-            : undefined
+        results: manga,
+        metadata
     });
 }
     async getMangaDetails(mangaId) {
