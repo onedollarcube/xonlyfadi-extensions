@@ -1251,7 +1251,7 @@ var _Sources = (() => {
     const titles = [];
     if (details?.name) titles.push(details?.name.trim());
     if (details?.russian) titles.push(details?.russian.trim());
-    const image = details?.cover?.preview || details?.cover?.snippet || "";
+    const image = details.cover.preview ? details.cover.preview : "";
     const author = details.authors ?? "";
     const arrayTags = [];
     if (details?.genres) {
