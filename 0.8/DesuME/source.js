@@ -1365,19 +1365,19 @@ var _Sources = (() => {
       return App.createChapter(chapter);
     });
   };
-  var parseChapterDetails = (data) => {
-  const chapter = data?.chapter;
+  var parseChapterDetails = (data, mangaId, chapterId) => {
+  const pages = [];
 
-  if (!chapter) {
-    throw new Error("Chapter data not found");
+  for (const page of data?.chapter?.pages ?? []) {
+    const url = page?.url ?? "";
+    if (!url) continue;
+
+    pages.push(url);
   }
 
-  const pages = (chapter.pages ?? [])
-    .filter((page) => page?.url)
-    .sort((a, b) => (a.page ?? 0) - (b.page ?? 0))
-    .map((page) => page.url);
-
   return App.createChapterDetails({
+    id: chapterId,
+    mangaId,
     pages
   });
 };
