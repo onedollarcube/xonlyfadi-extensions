@@ -1587,9 +1587,9 @@ var _Sources = (() => {
 
   // src/DesuME/DesuME.ts
   var DOMAIN = "https://desu.uno";
-  var API = `${DOMAIN}/api/manga`;
+  var API = `${DOMAIN}/api/manga/:id`;
   var DesuMEInfo = {
-    version: "2.0.3",
+    version: "2.0.4",
     name: "Desu",
     icon: "icon.png",
     author: "xOnlyFadi",
