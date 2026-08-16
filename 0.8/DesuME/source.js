@@ -1709,48 +1709,46 @@ var _Sources = (() => {
         metadata
       });
     }
-async getSearchResults(query, metadata) {
+    async getSearchResults(query, metadata) {
     const page = metadata?.page ?? 1;
-    const search = query?.title?.trim() ?? "";
 
-    let url = `${API}/manga/catalog?limit=30&page=${page}`;
+    let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
 
-    if (search) {
-        url += `&search=${encodeURIComponent(search)}`;
-    }
+    const genres = [];
+    const types = [];
+    const orders = [];
 
-    const Genres = [];
-    const Types = [];
-    const Order = [];
-
-    for (const x of query?.includedTags ?? []) {
-        const id = x?.id ?? "";
-        const parts = id.split(".");
-        const value = parts[parts.length - 1] ?? "";
+    for (const tag of query?.includedTags ?? []) {
+        const id = tag?.id ?? "";
+        const value = id.split(".").pop() ?? "";
 
         if (id.startsWith("genres.")) {
-            Genres.push(value);
+            genres.push(value);
         }
 
         if (id.startsWith("types.")) {
-            Types.push(value);
+            types.push(value);
         }
 
         if (id.startsWith("order.")) {
-            Order.push(value);
+            orders.push(value);
         }
     }
 
-    if (Genres.length > 0) {
-        url += `&genres=${Genres.join(",")}`;
+    if (query?.title?.trim()) {
+        url += `&search=${encodeURIComponent(query.title.trim())}`;
     }
 
-    if (Types.length > 0) {
-        url += `&kinds=${Types.join(",")}`;
+    if (genres.length > 0) {
+        url += `&genres=${genres.join(",")}`;
     }
 
-    if (Order.length > 0) {
-        url += `&order=${Order[0]}`;
+    if (types.length > 0) {
+        url += `&kinds=${types.join(",")}`;
+    }
+
+    if (orders.length > 0) {
+        url += `&order=${orders[0]}`;
     }
 
     const request = App.createRequest({
@@ -1774,13 +1772,13 @@ async getSearchResults(query, metadata) {
 
     const pagination = data?.pagination;
 
-    const hasNextPage =
+    const nextMetadata =
         pagination &&
-        Number(pagination.current_page) < Number(pagination.last_page);
-
-    const nextMetadata = hasNextPage
-        ? { page: page + 1 }
-        : undefined;
+        pagination.current_page < pagination.last_page
+            ? {
+                page: pagination.current_page + 1
+            }
+            : undefined;
 
     return App.createPagedResults({
         results: manga,
