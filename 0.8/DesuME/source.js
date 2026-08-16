@@ -1586,7 +1586,7 @@ var _Sources = (() => {
   };
 
   // src/DesuME/DesuME.ts
-  var DOMAIN = "https://desu.store";
+  var DOMAIN = "https://desu.city";
   var API = `${DOMAIN}/manga/api`;
   var DesuMEInfo = {
     version: "2.0.3",
@@ -1594,7 +1594,7 @@ var _Sources = (() => {
     icon: "icon.png",
     author: "xOnlyFadi",
     authorWebsite: "https://github.com/xOnlyFadi",
-    description: "Extension that pulls from desu.store.",
+    description: "Extension that pulls from desu.city.",
     contentRating: import_types.ContentRating.EVERYONE,
     websiteBaseURL: DOMAIN,
     intents: import_types.SourceIntents.HOMEPAGE_SECTIONS | import_types.SourceIntents.MANGA_CHAPTERS,
