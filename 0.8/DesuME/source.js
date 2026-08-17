@@ -1722,12 +1722,11 @@ var parseMangaDetails = (data, mangaId) => {
   try {
     data = JSON.parse(response.data);
   } catch (e) {
-    throw new Error("Ошибка парсинга JSON: " + e);
+    throw new Error(JSON.stringify(e));
   }
 
   const manga = parseSearch(data);
 
-  // Безопасная пагинация
   let nextPage = undefined;
   if (data.pagination && data.pagination.current_page < data.pagination.last_page) {
     nextPage = { page: page + 1 };
@@ -1742,10 +1741,8 @@ var parseMangaDetails = (data, mangaId) => {
 async getSearchResults(query, metadata) {
   const page = metadata?.page ?? 1;
 
-  // Пока поиск на стороне API не работает — просто показываем каталог
   let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
 
-  // Когда они доделают поиск, эта строка заработает
   if (query?.title) {
     url += `&search=${encodeURIComponent(query.title)}`;
   }
@@ -1762,7 +1759,7 @@ async getSearchResults(query, metadata) {
   try {
     data = JSON.parse(response.data);
   } catch (e) {
-    throw new Error("Ошибка парсинга JSON: " + e);
+    throw new Error(JSON.stringify(e));
   }
 
   const manga = parseSearch(data);
