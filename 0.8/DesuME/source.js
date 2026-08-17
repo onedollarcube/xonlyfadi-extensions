@@ -1721,7 +1721,8 @@ var parseMangaDetails = (data, mangaId) => {
         throw new Error(JSON.stringify(e));
       }
       const manga = parseSearch(data);
-      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
+      const pag = data.pagination;
+      metadata = pag && pag.current_page < pag.last_page ? { page: page + 1 } : undefined;
       return App.createPagedResults({
         results: manga,
         metadata
@@ -1771,7 +1772,8 @@ var parseMangaDetails = (data, mangaId) => {
         throw new Error(JSON.stringify(e));
       }
       const manga = parseSearch(data);
-      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
+      const pag = data.pagination;
+      metadata = pag && pag.current_page < pag.last_page ? { page: page + 1 } : undefined;
       return App.createPagedResults({
         results: manga,
         metadata
