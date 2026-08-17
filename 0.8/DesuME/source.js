@@ -1739,49 +1739,43 @@ var parseMangaDetails = (data, mangaId) => {
 }
 
 async getSearchResults(query, metadata) {
-  const q = query?.title?.trim();
+  const page = metadata?.page ?? 1;
 
-  if (!q) {
-    return App.createPagedResults({
-      results: [],
-      metadata: void 0
-    });
-  }
-
-  // Получаем актуальный XenForo token
-  const homeRequest = App.createRequest({
-    url: DOMAIN,
+  const pageRequest = App.createRequest({
+    url: `${API}/`,
     method: "GET"
   });
 
-  const homeResponse = await this.requestManager.schedule(homeRequest, 1);
-  this.CloudFlareError(homeResponse.status);
+  const pageResponse = await this.requestManager.schedule(pageRequest, 1);
+  this.CloudFlareError(pageResponse.status);
 
-  const tokenMatch = homeResponse.data.match(
-    /<input[^>]+name=["']_xfToken["'][^>]+value=["']([^"']+)["']/i
+  const tokenMatch = pageResponse.data.match(
+    /name=["']_xfToken["'][^>]*value=["']([^"']+)["']/i
   );
 
   if (!tokenMatch) {
-    throw new Error("Desu: _xfToken not found");
+    throw new Error("_xfToken not found");
   }
 
-  const xfToken = tokenMatch[1];
+  const token = tokenMatch[1];
+
+  const title = query?.title ?? "";
 
   const body =
-    `q=${encodeURIComponent(q)}` +
+    `q=${encodeURIComponent(title)}` +
     `&type=manga` +
-    `&_xfToken=${encodeURIComponent(xfToken)}` +
+    `&_xfToken=${encodeURIComponent(token)}` +
     `&_xfRequestUri=%2F` +
     `&_xfNoRedirect=1` +
     `&_xfResponseType=json`;
 
   const request = App.createRequest({
-    url: `${DOMAIN}/manga/search/`,
+    url: `${API}/manga/search/`,
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
       "X-Requested-With": "XMLHttpRequest",
-      "X-Ajax-Referer": `${DOMAIN}/`
+      "X-Ajax-Referer": `${API}/`
     },
     body
   });
@@ -1797,61 +1791,10 @@ async getSearchResults(query, metadata) {
     throw new Error(JSON.stringify(e));
   }
 
-  const html = data?.templateHtml ?? "";
-  const results = [];
-
-  const cardRegex =
-    /<li[^>]*class=["'][^"']*AniMangaSearchCard[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi;
-
-  let match;
-
-  while ((match = cardRegex.exec(html)) !== null) {
-    const card = match[1];
-
-    const hrefMatch = card.match(
-      /<a[^>]*href=["']([^"']*manga\/[^"']+)["']/i
-    );
-
-    if (!hrefMatch) {
-      continue;
-    }
-
-    const idMatch = hrefMatch[1].match(/\.([0-9]+)\/?$/);
-
-    if (!idMatch) {
-      continue;
-    }
-
-    const titleMatch = card.match(
-      /class=["'][^"']*AniMangaSearchCard__title[^"']*["'][^>]*>([\s\S]*?)<\/span>/i
-    );
-
-    const imageMatch = card.match(
-      /class=["'][^"']*AniMangaSearchCard__cover[^"']*["'][^>]*src=["']([^"']+)["']/i
-    );
-
-    const clean = (value) =>
-      value
-        ? value
-            .replace(/<[^>]+>/g, "")
-            .replace(/&amp;/g, "&")
-            .replace(/&quot;/g, '"')
-            .replace(/&#039;/g, "'")
-            .trim()
-        : "";
-
-    results.push(
-      App.createPartialSourceManga({
-        title: clean(titleMatch?.[1]),
-        image: imageMatch?.[1] || "",
-        mangaId: idMatch[1],
-        subtitle: ""
-      })
-    );
-  }
+  const manga = parseSearch(data);
 
   return App.createPagedResults({
-    results,
+    results: manga,
     metadata: void 0
   });
 }
