@@ -1728,62 +1728,55 @@ var parseMangaDetails = (data, mangaId) => {
       });
     }
     async getSearchResults(query, metadata) {
-    const page = metadata?.page ?? 1;
-
-    let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
-
-    if (query?.title) {
-        url += `&search=${query.title.replace(/ /g, "+").replace(/%20/g, "+")}`;
-    }
-
-    const request = App.createRequest({
+      const page = metadata?.page ?? 1;
+      let url = `${API}/manga/?limit=${this.limit}&page=${page}`;
+      const Genres = [];
+      const Types = [];
+      const Order = [];
+      query.includedTags?.map((x) => {
+        const id = x?.id;
+        const SplittedID = id?.split(".")?.pop() ?? "";
+        if (id.includes("genres.")) {
+          Genres.push(SplittedID);
+        }
+        if (id.includes("types.")) {
+          Types.push(SplittedID);
+        }
+        if (id.includes("order.")) {
+          Order.push(SplittedID);
+        }
+      });
+      if (query?.title) {
+        url += `&search=${query?.title.replace(/ /g, "+").replace(/%20/g, "+")}`;
+      }
+      if (Genres?.length > 0) {
+        url += `&genres=${Genres.join(",")}`;
+      }
+      if (Types?.length > 0) {
+        url += `&kinds=${Types.join(",")}`;
+      }
+      if (Order?.length > 0) {
+        url += `&order=${Order[0]}`;
+      }
+      const request = App.createRequest({
         url,
         method: "GET"
-    });
-
-    const response = await this.requestManager.schedule(request, 1);
-    this.CloudFlareError(response.status);
-
-    let data;
-    try {
+      });
+      const response = await this.requestManager.schedule(request, 1);
+      this.CloudFlareError(response.status);
+      let data;
+      try {
         data = JSON.parse(response.data);
-    } catch (e) {
+      } catch (e) {
         throw new Error(JSON.stringify(e));
-    }
-
-    const manga = [];
-
-    for (const item of data.mangas ?? []) {
-        manga.push(
-            App.createMangaInfo({
-                id: String(item.id),
-                titles: [
-                    item.name ?? "",
-                    item.russian ?? ""
-                ].filter((x) => x),
-                image: item.cover?.preview ?? "",
-                status: item.status === "released"
-                    ? "COMPLETED"
-                    : "ONGOING",
-                author: "",
-                desc: ""
-            })
-        );
-    }
-
-    const pagination = data.pagination;
-
-    metadata =
-        pagination &&
-        pagination.current_page < pagination.last_page
-            ? { page: pagination.current_page + 1 }
-            : void 0;
-
-    return App.createPagedResults({
+      }
+      const manga = parseSearch(data);
+      metadata = data.pageNavParams.count > data.pageNavParams.page * data.pageNavParams.limit ? { page: page + 1 } : void 0;
+      return App.createPagedResults({
         results: manga,
         metadata
-    });
-}
+      });
+    }
     async getMangaDetails(mangaId) {
       const request = App.createRequest({
         url: `${API}/manga/${mangaId}`,
