@@ -1738,7 +1738,7 @@ var parseMangaDetails = (data, mangaId) => {
   });
 }
 
- async getSearchResults(query, metadata) {
+async getSearchResults(query, metadata) {
   const q = query?.title?.trim();
 
   if (!q) {
@@ -1748,9 +1748,8 @@ var parseMangaDetails = (data, mangaId) => {
     });
   }
 
-  // 1. Получаем страницу, чтобы взять актуальный XenForo token
   const pageRequest = App.createRequest({
-    url: `${API}/`,
+    url: "https://desu.uno/",
     method: "GET"
   });
 
@@ -1769,7 +1768,6 @@ var parseMangaDetails = (data, mangaId) => {
 
   const xfToken = tokenMatch[1];
 
-  // 2. Формируем абсолютно такой же POST, как сайт
   const body =
     `q=${encodeURIComponent(q)}` +
     `&type=manga` +
@@ -1779,7 +1777,7 @@ var parseMangaDetails = (data, mangaId) => {
     `&_xfResponseType=json`;
 
   const request = App.createRequest({
-    url: `${API}/manga/search/`,
+    url: "https://desu.uno/manga/search/",
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -1804,7 +1802,7 @@ var parseMangaDetails = (data, mangaId) => {
 
   const results = [];
   const cardRegex =
-    /<li[^>]*class="[^"]*AniMangaSearchCard[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+    /<li[^>]*class=["'][^"']*AniMangaSearchCard[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi;
 
   let match;
 
@@ -1815,9 +1813,7 @@ var parseMangaDetails = (data, mangaId) => {
       /<a[^>]*href=["']([^"']*\/manga\/[^"']+)["']/
     );
 
-    if (!hrefMatch) {
-      continue;
-    }
+    if (!hrefMatch) continue;
 
     const imageMatch = card.match(
       /<img[^>]*src=["']([^"']+)["']/
@@ -1832,12 +1828,9 @@ var parseMangaDetails = (data, mangaId) => {
     );
 
     const href = hrefMatch[1];
-
     const idMatch = href.match(/\.([0-9]+)\/?$/);
 
-    if (!idMatch) {
-      continue;
-    }
+    if (!idMatch) continue;
 
     const mangaId = idMatch[1];
 
@@ -1849,14 +1842,10 @@ var parseMangaDetails = (data, mangaId) => {
             .trim()
         : "";
 
-    const title =
-      clean(titleMatch?.[1]) ||
-      clean(subtitleMatch?.[1]);
-
     results.push(
       App.createMangaInfo({
         id: mangaId,
-        title,
+        title: clean(titleMatch?.[1]) || clean(subtitleMatch?.[1]),
         image: imageMatch?.[1] || "",
         subtitle: clean(subtitleMatch?.[1]),
         metadata: metadata || {}
