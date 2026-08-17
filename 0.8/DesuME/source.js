@@ -1739,10 +1739,8 @@ var parseMangaDetails = (data, mangaId) => {
 }
 
 async getSearchResults(query, metadata) {
-  const page = metadata?.page ?? 1;
-
   const pageRequest = App.createRequest({
-    url: `${API}/`,
+    url: "https://desu.uno/",
     method: "GET"
   });
 
