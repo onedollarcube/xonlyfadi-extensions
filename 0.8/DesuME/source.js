@@ -1299,13 +1299,22 @@ var _Sources = (() => {
 var parseMangaDetails = (data, mangaId) => {
     const details = data.manga;
 
+    // Russian first: the 0.8 wrapper turns titles[0] into the primary title,
+    // so the Russian name is shown big and the original goes underneath.
     const titles = [];
-    if (details?.name) titles.push(details.name.trim());
     if (details?.russian) titles.push(details.russian.trim());
+    if (details?.name) titles.push(details.name.trim());
 
     const image = details.cover.preview ? details.cover.preview : "";
 
-    const author = details.authors ?? "";
+    // authors is [{author_id, name}] - 0.8 wants a plain string.
+    const author = (details?.authors ?? [])
+        .map((a) => a?.name ?? "")
+        .filter(Boolean)
+        .join(", ");
+    // The source has no separate artist field; show the same people there so
+    // the details page does not read "Unknown".
+    const artist = author;
 
     const arrayTags = [];
 
@@ -1355,6 +1364,7 @@ var parseMangaDetails = (data, mangaId) => {
             image,
             status,
             author,
+            artist,
             tags: [
                 App.createTagSection({
                     id: "0",
