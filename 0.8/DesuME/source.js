@@ -1262,7 +1262,8 @@ var _Sources = (() => {
       const subtitle = block.match(/AniMangaSearchCard__subtitle">([^<]*)</)?.[1] ?? "";
       results.push(App.createPartialSourceManga({
         title: decodeHTML(title).trim(),
-        image,
+        // the search page embeds the 120px thumb; ask for the full preview
+        image: image.replace("/covers/x120/", "/covers/preview/"),
         mangaId: `${id}`,
         subtitle: subtitle ? decodeHTML(subtitle).trim() : ""
       }));
@@ -1407,205 +1408,565 @@ var parseMangaDetails = (data, mangaId) => {
   var parseTags = () => {
     const Genres = [
       {
-        label: "\u0411\u0435\u0437\u0443\u043C\u0438\u0435",
+        label: "Безумие",
         id: "genres.Dementia"
       },
       {
-        label: "\u0411\u043E\u0435\u0432\u044B\u0435 \u0438\u0441\u043A\u0443\u0441\u0441\u0442\u0432\u0430",
+        label: "Боевые искусства",
         id: "genres.Martial+Arts"
       },
       {
-        label: "\u0412 \u0446\u0432\u0435\u0442\u0435",
+        label: "В цвете",
         id: "genres.Color"
       },
       {
-        label: "\u0412\u0430\u043C\u043F\u0438\u0440\u044B",
+        label: "Вампиры",
         id: "genres.Vampire"
       },
       {
-        label: "\u0412\u0435\u0431",
+        label: "Веб",
         id: "genres.Web"
       },
       {
-        label: "\u0413\u0430\u0440\u0435\u043C",
+        label: "Гарем",
         id: "genres.Harem"
       },
       {
-        label: "\u0413\u0435\u0440\u043E\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u0444\u044D\u043D\u0442\u0435\u0437\u0438",
+        label: "Героическое фэнтези",
         id: "genres.Heroic+Fantasy"
       },
       {
-        label: "\u0414\u0435\u043C\u043E\u043D\u044B",
+        label: "Демоны",
         id: "genres.Demons"
       },
       {
-        label: "\u0414\u0435\u0442\u0435\u043A\u0442\u0438\u0432",
+        label: "Детектив",
         id: "genres.Mystery"
       },
       {
-        label: "\u0414\u0437\u0451\u0441\u0435\u0439",
+        label: "Дзёсей",
         id: "genres.Josei"
       },
       {
-        label: "\u0414\u0440\u0430\u043C\u0430",
+        label: "Драма",
         id: "genres.Drama"
       },
       {
-        label: "\u0401\u043D\u043A\u043E\u043C\u0430",
+        label: "Ёнкома",
         id: "genres.Yonkoma"
       },
       {
-        label: "\u0418\u0433\u0440\u044B",
+        label: "Игры",
         id: "genres.Game"
       },
       {
-        label: "\u0418\u0441\u0435\u043A\u0430\u0439",
+        label: "Исекай",
         id: "genres.Isekai"
       },
       {
-        label: "\u0418\u0441\u0442\u043E\u0440\u0438\u0447\u0435\u0441\u043A\u0438\u0439",
+        label: "Исторический",
         id: "genres.Historical"
       },
       {
-        label: "\u041A\u043E\u043C\u0435\u0434\u0438\u044F",
+        label: "Комедия",
         id: "genres.Comedy"
       },
       {
-        label: "\u041A\u043E\u0441\u043C\u043E\u0441",
+        label: "Космос",
         id: "genres.Space"
       },
       {
-        label: "\u041B\u0438\u0442RPG",
+        label: "ЛитRPG",
         id: "genres.LitRPG"
       },
       {
-        label: "\u041C\u0430\u0433\u0438\u044F",
+        label: "Магия",
         id: "genres.Magic"
       },
       {
-        label: "\u041C\u0435\u0445\u0430",
+        label: "Меха",
         id: "genres.Mecha"
       },
       {
-        label: "\u041C\u0438\u0441\u0442\u0438\u043A\u0430",
+        label: "Мистика",
         id: "genres.Mystic"
       },
       {
-        label: "\u041C\u0443\u0437\u044B\u043A\u0430",
+        label: "Музыка",
         id: "genres.Music"
       },
       {
-        label: "\u041D\u0430\u0443\u0447\u043D\u0430\u044F \u0444\u0430\u043D\u0442\u0430\u0441\u0442\u0438\u043A\u0430",
+        label: "Научная фантастика",
         id: "genres.Sci-Fi"
       },
       {
-        label: "\u041F\u0430\u0440\u043E\u0434\u0438\u044F",
+        label: "Пародия",
         id: "genres.Parody"
       },
       {
-        label: "\u041F\u043E\u0432\u0441\u0435\u0434\u043D\u0435\u0432\u043D\u043E\u0441\u0442\u044C",
+        label: "Повседневность",
         id: "genres.Slice+of+Life"
       },
       {
-        label: "\u041F\u043E\u0441\u0442\u0430\u043F\u043E\u043A\u0430\u043B\u0438\u043F\u0442\u0438\u043A\u0430",
+        label: "Постапокалиптика",
         id: "genres.Post+Apocalyptic"
       },
       {
-        label: "\u041F\u0440\u0438\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+        label: "Приключения",
         id: "genres.Adventure"
       },
       {
-        label: "\u041F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u0447\u0435\u0441\u043A\u043E\u0435",
+        label: "Психологическое",
         id: "genres.Psychological"
       },
       {
-        label: "\u0420\u043E\u043C\u0430\u043D\u0442\u0438\u043A\u0430",
+        label: "Романтика",
         id: "genres.Romance"
       },
       {
-        label: "\u0421\u0430\u043C\u0443\u0440\u0430\u0438",
+        label: "Самураи",
         id: "genres.Samurai"
       },
       {
-        label: "\u0421\u0432\u0435\u0440\u0445\u044A\u0435\u0441\u0442\u0435\u0441\u0442\u0432\u0435\u043D\u043D\u043E\u0435",
+        label: "Сверхъестественное",
         id: "genres.Supernatural"
       },
       {
-        label: "\u0421\u0451\u0434\u0437\u0435",
+        label: "Сёдзе",
         id: "genres.Shoujo"
       },
       {
-        label: "\u0421\u0451\u0434\u0437\u0435 \u0410\u0439",
-        id: "genres.Shoujo+Ai"
-      },
-      {
-        label: "\u0421\u0435\u0439\u043D\u0435\u043D",
+        label: "Сейнен",
         id: "genres.Seinen"
       },
       {
-        label: "\u0421\u0451\u043D\u0435\u043D",
+        label: "Сёнен",
         id: "genres.Shounen"
       },
       {
-        label: "\u0421\u0451\u043D\u0435\u043D \u0410\u0439",
-        id: "genres.Shounen+Ai"
-      },
-      {
-        label: "\u0421\u043C\u0435\u043D\u0430 \u043F\u043E\u043B\u0430",
-        id: "genres.Gender+Bender"
-      },
-      {
-        label: "\u0421\u043F\u043E\u0440\u0442",
+        label: "Спорт",
         id: "genres.Sports"
       },
       {
-        label: "\u0421\u0443\u043F\u0435\u0440 \u0441\u0438\u043B\u0430",
+        label: "Супер сила",
         id: "genres.Super+Power"
       },
       {
-        label: "\u0422\u0440\u0430\u0433\u0435\u0434\u0438\u044F",
+        label: "Трагедия",
         id: "genres.Tragedy"
       },
       {
-        label: "\u0422\u0440\u0438\u043B\u043B\u0435\u0440",
+        label: "Триллер",
         id: "genres.Thriller"
       },
       {
-        label: "\u0423\u0436\u0430\u0441\u044B",
+        label: "Ужасы",
         id: "genres.Horror"
       },
       {
-        label: "\u0424\u0430\u043D\u0442\u0430\u0441\u0442\u0438\u043A\u0430",
+        label: "Фантастика",
         id: "genres.Fiction"
       },
       {
-        label: "\u0424\u044D\u043D\u0442\u0435\u0437\u0438",
+        label: "Фэнтези",
         id: "genres.Fantasy"
       },
       {
-        label: "\u0425\u0435\u043D\u0442\u0430\u0439",
+        label: "Хентай",
         id: "genres.Hentai"
       },
       {
-        label: "\u0428\u043A\u043E\u043B\u0430",
+        label: "Школа",
         id: "genres.School"
       },
       {
-        label: "\u042D\u043A\u0448\u0435\u043D",
+        label: "Экшен",
         id: "genres.Action"
       },
       {
-        label: "\u042D\u0442\u0442\u0438",
+        label: "Этти",
         id: "genres.Ecchi"
       },
       {
-        label: "\u042E\u0440\u0438",
-        id: "genres.Yuri"
+        label: "Азартные игры",
+        id: "genres.Gambling"
       },
       {
-        label: "\u042F\u043E\u0439",
-        id: "genres.Yaoi"
-      }
+        label: "Алхимия",
+        id: "genres.Alchemy"
+      },
+      {
+        label: "Ангелы",
+        id: "genres.Angels"
+      },
+      {
+        label: "Антигерой",
+        id: "genres.Anti-hero"
+      },
+      {
+        label: "Антиутопия",
+        id: "genres.Dystopia"
+      },
+      {
+        label: "Апокалипсис",
+        id: "genres.Apocalypse"
+      },
+      {
+        label: "Аристократия",
+        id: "genres.Aristocracy"
+      },
+      {
+        label: "Армия",
+        id: "genres.Army"
+      },
+      {
+        label: "Артефакты",
+        id: "genres.Artifacts"
+      },
+      {
+        label: "Боги",
+        id: "genres.Gods"
+      },
+      {
+        label: "Бои на мечах",
+        id: "genres.Sword+Fighting"
+      },
+      {
+        label: "Борьба за власть",
+        id: "genres.Power+Struggle"
+      },
+      {
+        label: "Брат и сестра",
+        id: "genres.Brother+and+Sister"
+      },
+      {
+        label: "Будущее",
+        id: "genres.Future"
+      },
+      {
+        label: "Ведьма",
+        id: "genres.Witch"
+      },
+      {
+        label: "Вестерн",
+        id: "genres.Western"
+      },
+      {
+        label: "Видеоигры",
+        id: "genres.Video+Games"
+      },
+      {
+        label: "Виртуальная реальность",
+        id: "genres.Virtual+Reality"
+      },
+      {
+        label: "Владыка демонов",
+        id: "genres.Demon+Lord"
+      },
+      {
+        label: "Военные",
+        id: "genres.Military"
+      },
+      {
+        label: "Война",
+        id: "genres.War"
+      },
+      {
+        label: "Волшебники / маги",
+        id: "genres.Wizards+/+Mages"
+      },
+      {
+        label: "Волшебные существа",
+        id: "genres.Magical+Creatures"
+      },
+      {
+        label: "Воспоминания из другого мира",
+        id: "genres.Memories+from+Another+World"
+      },
+      {
+        label: "Выживание",
+        id: "genres.Survival"
+      },
+      {
+        label: "ГГ женщина",
+        id: "genres.Female+MC"
+      },
+      {
+        label: "ГГ имба",
+        id: "genres.IMBA+MC"
+      },
+      {
+        label: "ГГ мужчина",
+        id: "genres.Male+MC"
+      },
+      {
+        label: "Геймеры",
+        id: "genres.Gamers"
+      },
+      {
+        label: "Гильдии",
+        id: "genres.Guilds"
+      },
+      {
+        label: "Глупый ГГ",
+        id: "genres.Stupid+MC"
+      },
+      {
+        label: "Гоблины",
+        id: "genres.Goblins"
+      },
+      {
+        label: "Горничные",
+        id: "genres.Maids"
+      },
+      {
+        label: "Гяру",
+        id: "genres.Gyaru"
+      },
+      {
+        label: "Драконы",
+        id: "genres.Dragons"
+      },
+      {
+        label: "Дружба",
+        id: "genres.Friendship"
+      },
+      {
+        label: "Жестокий мир",
+        id: "genres.Cruel+World"
+      },
+      {
+        label: "Животные компаньоны",
+        id: "genres.Animal+Companions"
+      },
+      {
+        label: "Завоевание мира",
+        id: "genres.World+Conquest"
+      },
+      {
+        label: "Зверолюди",
+        id: "genres.Beastmen"
+      },
+      {
+        label: "Злые духи",
+        id: "genres.Evil+Spirits"
+      },
+      {
+        label: "Зомби",
+        id: "genres.Zombies"
+      },
+      {
+        label: "Игровые элементы",
+        id: "genres.Gaming+elements"
+      },
+      {
+        label: "Империи",
+        id: "genres.Empires"
+      },
+      {
+        label: "Квесты",
+        id: "genres.Quests"
+      },
+      {
+        label: "Кулинария",
+        id: "genres.Cooking"
+      },
+      {
+        label: "Культивирование",
+        id: "genres.Cultivation"
+      },
+      {
+        label: "Легендарное оружие",
+        id: "genres.Legendary+weapons"
+      },
+      {
+        label: "Магическая академия",
+        id: "genres.Magic+academy"
+      },
+      {
+        label: "Мафия",
+        id: "genres.Mafia"
+      },
+      {
+        label: "Медицина",
+        id: "genres.Medicine"
+      },
+      {
+        label: "Месть",
+        id: "genres.Revenge"
+      },
+      {
+        label: "Моли",
+        id: "genres.Moli"
+      },
+      {
+        label: "Монстродевушки",
+        id: "genres.Monster+girls"
+      },
+      {
+        label: "Монстры",
+        id: "genres.Monsters"
+      },
+      {
+        label: "Мурим",
+        id: "genres.Murim"
+      },
+      {
+        label: "Навыки / способности",
+        id: "genres.Skills+/+abilities"
+      },
+      {
+        label: "Наёмники",
+        id: "genres.Mercenaries"
+      },
+      {
+        label: "Насилие / жестокость",
+        id: "genres.Violence+/+cruelty"
+      },
+      {
+        label: "Нежить",
+        id: "genres.Undead"
+      },
+      {
+        label: "Ниндзя",
+        id: "genres.Ninja"
+      },
+      {
+        label: "Обмен телами",
+        id: "genres.Body+swap"
+      },
+      {
+        label: "Обратный Гарем",
+        id: "genres.Reverse+Harem"
+      },
+      {
+        label: "Огнестрельное оружие",
+        id: "genres.Firearms"
+      },
+      {
+        label: "Офисные Работники",
+        id: "genres.Office+workers"
+      },
+      {
+        label: "Пираты",
+        id: "genres.Pirates"
+      },
+      {
+        label: "Подземелья",
+        id: "genres.Dungeons"
+      },
+      {
+        label: "Политика",
+        id: "genres.Politics"
+      },
+      {
+        label: "Полиция",
+        id: "genres.Police"
+      },
+      {
+        label: "Полноцветный",
+        id: "genres.Full+color"
+      },
+      {
+        label: "Путешествие во времени",
+        id: "genres.Time+travel"
+      },
+      {
+        label: "Рабы",
+        id: "genres.Slaves"
+      },
+      {
+        label: "Разумные расы",
+        id: "genres.Sentient+races"
+      },
+      {
+        label: "Ранги силы",
+        id: "genres.Power+ranks"
+      },
+      {
+        label: "Реинкарнация",
+        id: "genres.Reincarnation"
+      },
+      {
+        label: "Роботы",
+        id: "genres.Robots"
+      },
+      {
+        label: "Рыцари",
+        id: "genres.Knights"
+      },
+      {
+        label: "Система",
+        id: "genres.System"
+      },
+      {
+        label: "Скрытие личности",
+        id: "genres.Identity+hiding"
+      },
+      {
+        label: "Спасение мира",
+        id: "genres.Saving+the+world"
+      },
+      {
+        label: "Спортивное тело",
+        id: "genres.Sports+body"
+      },
+      {
+        label: "Средневековье",
+        id: "genres.Middle+Ages"
+      },
+      {
+        label: "Стимпанк",
+        id: "genres.Steampunk"
+      },
+      {
+        label: "Супергерои",
+        id: "genres.Superheroes"
+      },
+      {
+        label: "Традиционные игры",
+        id: "genres.Traditional+games"
+      },
+      {
+        label: "Умный ГГ",
+        id: "genres.Smart+GG"
+      },
+      {
+        label: "Учитель",
+        id: "genres.Teacher"
+      },
+      {
+        label: "Философия",
+        id: "genres.Philosophy"
+      },
+      {
+        label: "Хикикомори",
+        id: "genres.Hikikomori"
+      },
+      {
+        label: "Холодное оружие",
+        id: "genres.Cold+weapons"
+      },
+      {
+        label: "Шантаж",
+        id: "genres.Blackmail"
+      },
+      {
+        label: "Эльфы",
+        id: "genres.Elves"
+      },
+      {
+        label: "Якудза",
+        id: "genres.Yakuza"
+      },
+      {
+        label: "Яндере",
+        id: "genres.Yandere"
+      },
+      {
+        label: "Япония",
+        id: "genres.Japan"
+      },
     ];
     const Types = [
       {
@@ -1775,17 +2136,35 @@ var parseMangaDetails = (data, mangaId) => {
 async getSearchResults(query, metadata) {
   const query_ = query?.title?.trim() ?? "";
   const filters = query?.filters ?? [];
+  const page = metadata?.page ?? 1;
 
-  // No search endpoint in the JSON API: the catalog silently ignores
-  // &search=, so use the site's HTML search page (max 20 results, no paging).
-  if (!query_) {
-    return App.createPagedResults({ results: [], metadata: undefined });
-  }
-
-  // The HTML search page ignores genre/kind filters, so apply them locally.
+  // genres.<slug> / types.<kind> from the filter sheet
   const genres = filters.filter(f => f.id?.startsWith("genres.")).map(f => f.id.slice(7).replace(/\+/g, " "));
   const kinds = filters.filter(f => f.id?.startsWith("types.")).map(f => f.id.slice(6));
 
+  // No text query: browse the HTML catalog, which honours genres/kinds/order.
+  // (The JSON catalog ignores every filter param, and the search page needs a q.)
+  if (!query_) {
+    if (!genres.length && !kinds.length) {
+      return App.createPagedResults({ results: [], metadata: undefined });
+    }
+    const params = new URLSearchParams();
+    if (genres.length) params.set("genres", genres.join(","));
+    if (kinds.length) params.set("kinds", kinds[0]);
+    params.set("page", String(page));
+    const res = await this.requestManager.schedule(App.createRequest({
+      url: `${DOMAIN}/manga/?${params.toString()}`,
+      method: "GET"
+    }), 1);
+    this.CloudFlareError(res.status);
+    const parsed = parseCatalogHTML(res.data);
+    return App.createPagedResults({
+      results: parsed.items,
+      metadata: page < parsed.lastPage ? { page: page + 1 } : undefined
+    });
+  }
+
+  // The HTML search page ignores genre/kind filters, so apply them locally.
   const request = App.createRequest({
     url: `${DOMAIN}/manga/search/?q=${encodeURIComponent(query_)}&type=manga`,
     method: "GET"
