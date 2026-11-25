@@ -1246,6 +1246,29 @@ var _Sources = (() => {
     }
     return results;
   };
+  // The JSON API has no search endpoint (catalog ignores every search-like
+  // param), so search is served by the site's HTML search page.
+  var parseSearchHTML = (html) => {
+    const results = [];
+    const cardRe = /<li class="AniMangaSearchCard">([\s\S]*?)(?=<li class="AniMangaSearchCard">|<\/ul>)/g;
+    let match;
+    while ((match = cardRe.exec(html))) {
+      const block = match[1];
+      const href = block.match(/<a href="([^"]+)" class="AniMangaSearchCard__link">/);
+      const id = href?.[1]?.match(/\.(\d+)\/?$/)?.[1];
+      if (!id) continue;
+      const image = block.match(/<img src="([^"]+)" alt=/)?.[1] ?? "";
+      const title = block.match(/AniMangaSearchCard__title">([^<]*)</)?.[1] ?? "";
+      const subtitle = block.match(/AniMangaSearchCard__subtitle">([^<]*)</)?.[1] ?? "";
+      results.push(App.createPartialSourceManga({
+        title: decodeHTML(title).trim(),
+        image,
+        mangaId: `${id}`,
+        subtitle: subtitle ? decodeHTML(subtitle).trim() : ""
+      }));
+    }
+    return results;
+  };
 var parseMangaDetails = (data, mangaId) => {
     const details = data.manga;
 
@@ -1739,39 +1762,25 @@ var parseMangaDetails = (data, mangaId) => {
 }
 
 async getSearchResults(query, metadata) {
-  const page = metadata?.page ?? 1;
+  const query_ = query?.title?.trim() ?? "";
 
-  let url = `${API}/manga/catalog?limit=${this.limit}&page=${page}`;
-
-  if (query?.title) {
-    url += `&search=${encodeURIComponent(query.title)}`;
+  // No search endpoint in the JSON API: the catalog silently ignores
+  // &search=, so use the site's HTML search page (max 20 results, no paging).
+  if (!query_) {
+    return App.createPagedResults({ results: [], metadata: undefined });
   }
 
   const request = App.createRequest({
-    url: url,
+    url: `${DOMAIN}/manga/search/?q=${encodeURIComponent(query_)}&type=manga`,
     method: "GET"
   });
 
   const response = await this.requestManager.schedule(request, 1);
   this.CloudFlareError(response.status);
 
-  let data;
-  try {
-    data = JSON.parse(response.data);
-  } catch (e) {
-    throw new Error(JSON.stringify(e));
-  }
-
-  const manga = parseSearch(data);
-
-  let nextPage = undefined;
-  if (data.pagination && data.pagination.current_page < data.pagination.last_page) {
-    nextPage = { page: page + 1 };
-  }
-
   return App.createPagedResults({
-    results: manga,
-    metadata: nextPage
+    results: parseSearchHTML(response.data),
+    metadata: undefined
   });
 }
 
