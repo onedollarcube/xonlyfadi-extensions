@@ -1269,6 +1269,30 @@ var _Sources = (() => {
     }
     return results;
   };
+  // The HTML catalog (/manga/) supports order_by, genres and kinds, which the
+  // JSON catalog silently ignores. Used for the homepage rows and view-more.
+  var parseCatalogHTML = (html) => {
+    const items = [];
+    const itemRe = /<li class="primaryContent memberListItem"[^>]*>([\s\S]*?)(?=<li class="primaryContent memberListItem"|<\/ol>)/g;
+    let match;
+    while ((match = itemRe.exec(html))) {
+      const block = match[1];
+      const href = block.match(/<a href="(manga\/[^"]+)"/);
+      const id = href?.[1]?.match(/\.(\d+)\/?$/)?.[1];
+      if (!id) continue;
+      const image = block.match(/background-image: url\('([^']+)'\)/)?.[1] ?? "";
+      const russian = block.match(/itemprop="title">([^<]*)</)?.[1] ?? "";
+      const original = block.match(/class="animeTitle oTitle" title="[^"]*">([^<]*)</)?.[1] ?? "";
+      items.push(App.createPartialSourceManga({
+        title: decodeHTML(russian).trim() || decodeHTML(original).trim(),
+        image,
+        mangaId: `${id}`,
+        subtitle: decodeHTML(original).trim()
+      }));
+    }
+    const last = html.match(/data-last="(\d+)"/)?.[1];
+    return { items, lastPage: last ? parseInt(last, 10) : 1 };
+  };
 var parseMangaDetails = (data, mangaId) => {
     const details = data.manga;
 
@@ -1677,7 +1701,7 @@ var parseMangaDetails = (data, mangaId) => {
       const sections = [
         {
           request: App.createRequest({
-            url: `${API}/manga/catalog?limit=${this.limit}&order=popular&page=1`,
+            url: `${DOMAIN}/manga/?order_by=popular`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1689,7 +1713,7 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${API}/manga/catalog?limit=${this.limit}&order=updated&page=1`,
+            url: `${DOMAIN}/manga/?order_by=updated`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1701,7 +1725,7 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${API}/manga/catalog?limit=${this.limit}&order=name&page=1`,
+            url: `${DOMAIN}/manga/?order_by=name`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -1717,13 +1741,9 @@ var parseMangaDetails = (data, mangaId) => {
         sectionCallback(section.section);
         promises.push(this.requestManager.schedule(section.request, 1).then((response) => {
           this.CloudFlareError(response.status);
-          let data;
-          try {
-            data = JSON.parse(response.data);
-          } catch (e) {
-            throw new Error(JSON.stringify(e));
-          }
-          section.section.items = parseSearch(data);
+          const parsed = parseCatalogHTML(response.data);
+          section.section.items = parsed.items;
+          section.section.metadata = parsed.lastPage > 1 ? { page: 2, lastPage: parsed.lastPage } : undefined;
           sectionCallback(section.section);
         }));
       }
@@ -1732,43 +1752,39 @@ var parseMangaDetails = (data, mangaId) => {
 
     async getViewMoreItems(homepageSectionId, metadata) {
   const page = metadata?.page ?? 1;
+  const order = homepageSectionId === "name" ? "name" : homepageSectionId === "popular" ? "popular" : "updated";
 
   const request = App.createRequest({
-    url: `${API}/manga/catalog?limit=${this.limit}&page=${page}`,
+    url: `${DOMAIN}/manga/?order_by=${order}&page=${page}`,
     method: "GET"
   });
 
   const response = await this.requestManager.schedule(request, 1);
   this.CloudFlareError(response.status);
 
-  let data;
-  try {
-    data = JSON.parse(response.data);
-  } catch (e) {
-    throw new Error(JSON.stringify(e));
-  }
+  const parsed = parseCatalogHTML(response.data);
 
-  const manga = parseSearch(data);
-
-  let nextPage = undefined;
-  if (data.pagination && data.pagination.current_page < data.pagination.last_page) {
-    nextPage = { page: page + 1 };
-  }
+  const nextPage = page < parsed.lastPage ? { page: page + 1 } : undefined;
 
   return App.createPagedResults({
-    results: manga,
+    results: parsed.items,
     metadata: nextPage
   });
 }
 
 async getSearchResults(query, metadata) {
   const query_ = query?.title?.trim() ?? "";
+  const filters = query?.filters ?? [];
 
   // No search endpoint in the JSON API: the catalog silently ignores
   // &search=, so use the site's HTML search page (max 20 results, no paging).
   if (!query_) {
     return App.createPagedResults({ results: [], metadata: undefined });
   }
+
+  // The HTML search page ignores genre/kind filters, so apply them locally.
+  const genres = filters.filter(f => f.id?.startsWith("genres.")).map(f => f.id.slice(7).replace(/\+/g, " "));
+  const kinds = filters.filter(f => f.id?.startsWith("types.")).map(f => f.id.slice(6));
 
   const request = App.createRequest({
     url: `${DOMAIN}/manga/search/?q=${encodeURIComponent(query_)}&type=manga`,
@@ -1778,8 +1794,32 @@ async getSearchResults(query, metadata) {
   const response = await this.requestManager.schedule(request, 1);
   this.CloudFlareError(response.status);
 
+  let results = parseSearchHTML(response.data);
+
+  if (genres.length || kinds.length) {
+    const wantedGenres = new Set(genres.map(g => g.toLowerCase()));
+    const wantedKinds = new Set(kinds.map(k => k.toLowerCase()));
+    const keep = [];
+    for (const item of results) {
+      // The search page has no filters, so check each hit against the API.
+      const res = await this.requestManager.schedule(App.createRequest({
+        url: `${API}/manga/${item.mangaId}`,
+        method: "GET"
+      }), 1).catch(() => null);
+      if (!res || res.status !== 200) continue;
+      let data;
+      try { data = JSON.parse(res.data); } catch (_) { continue; }
+      const manga = data.manga ?? {};
+      const tags = (manga.genres ?? []).map(g => String(g.slug ?? "").toLowerCase());
+      const okGenre = !wantedGenres.size || genres.some(g => tags.includes(g.toLowerCase()));
+      const okKind = !wantedKinds.size || wantedKinds.has(String(manga.kind ?? "").toLowerCase());
+      if (okGenre && okKind) keep.push(item);
+    }
+    results = keep;
+  }
+
   return App.createPagedResults({
-    results: parseSearchHTML(response.data),
+    results,
     metadata: undefined
   });
 }
@@ -1796,6 +1836,13 @@ async getSearchResults(query, metadata) {
         data = JSON.parse(response.data);
       } catch (e) {
         throw new Error(JSON.stringify(e));
+      }
+      // 451 = removed at the rights holder's request; the API answers with a
+      // JSON error body instead of a manga, so surface it as a clear message.
+      if (response.status === 451 || data?.errors) {
+        const code = data?.errors?.[0]?.code ?? "unavailable";
+        const msg = data?.errors?.[0]?.message ?? "Manga unavailable";
+        throw new Error(`${msg} (${code})`);
       }
       return parseMangaDetails(data, mangaId);
     }
