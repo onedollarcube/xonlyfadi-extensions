@@ -2099,10 +2099,12 @@ var parseMangaDetails = (data, mangaId) => {
           })
         },
         {
-          // 18+ titles are excluded from the rows above (status=no18plus), so
-          // give them their own row: the same catalog without that filter.
+          // The site has no "only 18+" filter (every such param is ignored),
+          // and its own age_18_plus flag also covers ecchi titles like One
+          // Punch Man. The Hentai genre is the closest real filter: every hit
+          // is adult. The adult flag is kept as a second guard.
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=popular`,
+            url: `${DOMAIN}/manga/?genres=Hentai&order_by=popular`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2119,7 +2121,9 @@ var parseMangaDetails = (data, mangaId) => {
         promises.push(this.requestManager.schedule(section.request, 1).then((response) => {
           this.CloudFlareError(response.status);
           const parsed = parseCatalogHTML(response.data);
-          section.section.items = parsed.items;
+          section.section.items = section.section.id === "adult"
+            ? parsed.items.filter(item => item.adult)
+            : parsed.items;
           section.section.metadata = parsed.lastPage > 1 ? { page: 2, lastPage: parsed.lastPage } : undefined;
           sectionCallback(section.section);
         }));
@@ -2130,8 +2134,8 @@ var parseMangaDetails = (data, mangaId) => {
     async getViewMoreItems(homepageSectionId, metadata) {
   const page = metadata?.page ?? 1;
   const order = homepageSectionId === "name" ? "name" : homepageSectionId === "popular" ? "popular" : "updated";
-  // The 18+ row is the unfiltered popular catalog; every other row hides 18+.
-  const filter = homepageSectionId === "adult" ? "" : "&status=no18plus";
+  // Every row but 18+ hides adult titles; the 18+ row is the Hentai genre.
+  const filter = homepageSectionId === "adult" ? "&genres=Hentai" : "&status=no18plus";
 
   const request = App.createRequest({
     url: `${DOMAIN}/manga/?order_by=${order}${filter}&page=${page}`,
@@ -2146,7 +2150,9 @@ var parseMangaDetails = (data, mangaId) => {
   const nextPage = page < parsed.lastPage ? { page: page + 1 } : undefined;
 
   return App.createPagedResults({
-    results: parsed.items,
+    results: homepageSectionId === "adult"
+      ? parsed.items.filter(item => item.adult)
+      : parsed.items,
     metadata: nextPage
   });
 }
