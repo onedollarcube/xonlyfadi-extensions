@@ -1300,10 +1300,18 @@ var parseMangaDetails = (data, mangaId) => {
     const details = data.manga;
 
     // Russian first: the 0.8 wrapper turns titles[0] into the primary title,
-    // so the Russian name is shown big and the original goes underneath.
+    // so the Russian name is shown big.
     const titles = [];
     if (details?.russian) titles.push(details.russian.trim());
     if (details?.name) titles.push(details.name.trim());
+
+    // Paperback 0.8 renders only the primary title, so the original name is
+    // also passed as an info row - that is what shows under the title.
+    const originalTitle = details?.name?.trim() ?? "";
+    const additionalInfo = {};
+    if (originalTitle && originalTitle !== details?.russian?.trim()) {
+        additionalInfo["Original title"] = originalTitle;
+    }
 
     const image = details.cover.preview ? details.cover.preview : "";
 
@@ -1373,7 +1381,8 @@ var parseMangaDetails = (data, mangaId) => {
                 })
             ],
             desc: details?.description ? details.description : "",
-            hentai: false
+            hentai: false,
+            additionalInfo
         })
     });
 };
