@@ -1284,11 +1284,13 @@ var _Sources = (() => {
       const image = block.match(/background-image: url\('([^']+)'\)/)?.[1] ?? "";
       const russian = block.match(/itemprop="title">([^<]*)</)?.[1] ?? "";
       const original = block.match(/class="animeTitle oTitle" title="[^"]*">([^<]*)</)?.[1] ?? "";
+      const adult = /age_18_plus/.test(block);
       items.push(App.createPartialSourceManga({
         title: decodeHTML(russian).trim() || decodeHTML(original).trim(),
         image,
         mangaId: `${id}`,
-        subtitle: decodeHTML(original).trim()
+        subtitle: decodeHTML(original).trim(),
+        adult
       }));
     }
     const last = html.match(/data-last="(\d+)"/)?.[1];
@@ -2062,7 +2064,7 @@ var parseMangaDetails = (data, mangaId) => {
       const sections = [
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=popular`,
+            url: `${DOMAIN}/manga/?order_by=popular&status=no18plus`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2074,7 +2076,7 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=updated`,
+            url: `${DOMAIN}/manga/?order_by=updated&status=no18plus`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2086,12 +2088,26 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=name`,
+            url: `${DOMAIN}/manga/?order_by=name&status=no18plus`,
             method: "GET"
           }),
           section: App.createHomeSection({
             id: "name",
             title: "\u043F\u043E \u0430\u043B\u0444\u0430\u0432\u0438\u0442\u0443",
+            containsMoreItems: true,
+            type: "singleRowNormal"
+          })
+        },
+        {
+          // 18+ titles are excluded from the rows above (status=no18plus), so
+          // give them their own row: the same catalog without that filter.
+          request: App.createRequest({
+            url: `${DOMAIN}/manga/?order_by=popular`,
+            method: "GET"
+          }),
+          section: App.createHomeSection({
+            id: "adult",
+            title: "18+",
             containsMoreItems: true,
             type: "singleRowNormal"
           })
@@ -2114,9 +2130,11 @@ var parseMangaDetails = (data, mangaId) => {
     async getViewMoreItems(homepageSectionId, metadata) {
   const page = metadata?.page ?? 1;
   const order = homepageSectionId === "name" ? "name" : homepageSectionId === "popular" ? "popular" : "updated";
+  // The 18+ row is the unfiltered popular catalog; every other row hides 18+.
+  const filter = homepageSectionId === "adult" ? "" : "&status=no18plus";
 
   const request = App.createRequest({
-    url: `${DOMAIN}/manga/?order_by=${order}&page=${page}`,
+    url: `${DOMAIN}/manga/?order_by=${order}${filter}&page=${page}`,
     method: "GET"
   });
 
@@ -2135,25 +2153,29 @@ var parseMangaDetails = (data, mangaId) => {
 
 async getSearchResults(query, metadata) {
   const query_ = query?.title?.trim() ?? "";
-  const filters = query?.filters ?? [];
   const page = metadata?.page ?? 1;
 
-  // genres.<slug> / types.<kind> from the filter sheet
-  const genres = filters.filter(f => f.id?.startsWith("genres.")).map(f => f.id.slice(7).replace(/\+/g, " "));
-  const kinds = filters.filter(f => f.id?.startsWith("types.")).map(f => f.id.slice(6));
+  // Paperback 0.8 hands the legacy shape: includedTags/excludedTags, not
+  // query.filters. Tag ids are "genres.<slug>" / "types.<kind>".
+  const included = query?.includedTags ?? [];
+  const excluded = query?.excludedTags ?? [];
+  const genres = included.filter(t => t.id?.startsWith("genres.")).map(t => t.id.slice(7).replace(/\+/g, " "));
+  const kinds = included.filter(t => t.id?.startsWith("types.")).map(t => t.id.slice(6));
+  const notGenres = excluded.filter(t => t.id?.startsWith("genres.")).map(t => t.id.slice(7).replace(/\+/g, " "));
 
   // No text query: browse the HTML catalog, which honours genres/kinds/order.
   // (The JSON catalog ignores every filter param, and the search page needs a q.)
   if (!query_) {
-    if (!genres.length && !kinds.length) {
+    if (!genres.length && !kinds.length && !notGenres.length) {
       return App.createPagedResults({ results: [], metadata: undefined });
     }
-    const params = new URLSearchParams();
-    if (genres.length) params.set("genres", genres.join(","));
-    if (kinds.length) params.set("kinds", kinds[0]);
-    params.set("page", String(page));
+    const params = [];
+    if (genres.length) params.push(`genres=${genres.join(",")}`);
+    if (kinds.length) params.push(`kinds=${kinds[0]}`);
+    if (notGenres.length) params.push(`status=no18plus`);
+    params.push(`page=${page}`);
     const res = await this.requestManager.schedule(App.createRequest({
-      url: `${DOMAIN}/manga/?${params.toString()}`,
+      url: `${DOMAIN}/manga/?${params.join("&")}`,
       method: "GET"
     }), 1);
     this.CloudFlareError(res.status);
@@ -2175,9 +2197,10 @@ async getSearchResults(query, metadata) {
 
   let results = parseSearchHTML(response.data);
 
-  if (genres.length || kinds.length) {
+  if (genres.length || kinds.length || notGenres.length) {
     const wantedGenres = new Set(genres.map(g => g.toLowerCase()));
     const wantedKinds = new Set(kinds.map(k => k.toLowerCase()));
+    const blockedGenres = new Set(notGenres.map(g => g.toLowerCase()));
     const keep = [];
     for (const item of results) {
       // The search page has no filters, so check each hit against the API.
@@ -2192,7 +2215,8 @@ async getSearchResults(query, metadata) {
       const tags = (manga.genres ?? []).map(g => String(g.slug ?? "").toLowerCase());
       const okGenre = !wantedGenres.size || genres.some(g => tags.includes(g.toLowerCase()));
       const okKind = !wantedKinds.size || wantedKinds.has(String(manga.kind ?? "").toLowerCase());
-      if (okGenre && okKind) keep.push(item);
+      const okExcluded = !blockedGenres.size || !notGenres.some(g => tags.includes(g.toLowerCase()));
+      if (okGenre && okKind && okExcluded) keep.push(item);
     }
     results = keep;
   }
