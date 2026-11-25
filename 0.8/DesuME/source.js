@@ -2064,7 +2064,7 @@ var parseMangaDetails = (data, mangaId) => {
       const sections = [
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=popular&status=no18plus`,
+            url: `${DOMAIN}/manga/?order_by=popular`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2076,7 +2076,7 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=updated&status=no18plus`,
+            url: `${DOMAIN}/manga/?order_by=updated`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2088,7 +2088,7 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=name&status=no18plus`,
+            url: `${DOMAIN}/manga/?order_by=name`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2100,9 +2100,8 @@ var parseMangaDetails = (data, mangaId) => {
         },
         {
           // The site has no "only 18+" filter (every such param is ignored),
-          // and its own age_18_plus flag also covers ecchi titles like One
-          // Punch Man. The Hentai genre is the closest real filter: every hit
-          // is adult. The adult flag is kept as a second guard.
+          // and its age_18_plus flag also covers ecchi titles like One Punch Man.
+          // The Hentai genre is the closest real filter: every hit is adult.
           request: App.createRequest({
             url: `${DOMAIN}/manga/?genres=Hentai&order_by=popular`,
             method: "GET"
@@ -2115,27 +2114,29 @@ var parseMangaDetails = (data, mangaId) => {
           })
         }
       ];
-      const promises = [];
-      for (const section of sections) {
-        sectionCallback(section.section);
-        promises.push(this.requestManager.schedule(section.request, 1).then((response) => {
+      // Each row loads independently: one failed request must not blank the
+      // others (the host rate-limits bursts and DDoS-Guard can answer 403).
+      await Promise.all(sections.map(async (entry) => {
+        sectionCallback(entry.section);
+        try {
+          const response = await this.requestManager.schedule(entry.request, 1);
           this.CloudFlareError(response.status);
           const parsed = parseCatalogHTML(response.data);
-          section.section.items = section.section.id === "adult"
-            ? parsed.items.filter(item => item.adult)
-            : parsed.items;
-          section.section.metadata = parsed.lastPage > 1 ? { page: 2, lastPage: parsed.lastPage } : undefined;
-          sectionCallback(section.section);
-        }));
-      }
-      await Promise.all(promises);
+          entry.section.items = parsed.items;
+          entry.section.metadata = parsed.lastPage > 1 ? { page: 2, lastPage: parsed.lastPage } : undefined;
+        } catch (e) {
+          entry.section.items = [];
+          entry.section.metadata = undefined;
+        }
+        sectionCallback(entry.section);
+      }));
     }
 
     async getViewMoreItems(homepageSectionId, metadata) {
   const page = metadata?.page ?? 1;
   const order = homepageSectionId === "name" ? "name" : homepageSectionId === "popular" ? "popular" : "updated";
-  // Every row but 18+ hides adult titles; the 18+ row is the Hentai genre.
-  const filter = homepageSectionId === "adult" ? "&genres=Hentai" : "&status=no18plus";
+  // The 18+ row is the Hentai genre; every other row is the plain catalog.
+  const filter = homepageSectionId === "adult" ? "&genres=Hentai" : "";
 
   const request = App.createRequest({
     url: `${DOMAIN}/manga/?order_by=${order}${filter}&page=${page}`,
@@ -2150,9 +2151,7 @@ var parseMangaDetails = (data, mangaId) => {
   const nextPage = page < parsed.lastPage ? { page: page + 1 } : undefined;
 
   return App.createPagedResults({
-    results: homepageSectionId === "adult"
-      ? parsed.items.filter(item => item.adult)
-      : parsed.items,
+    results: parsed.items,
     metadata: nextPage
   });
 }
