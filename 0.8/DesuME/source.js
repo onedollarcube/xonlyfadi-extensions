@@ -1305,13 +1305,16 @@ var parseMangaDetails = (data, mangaId) => {
     if (details?.russian) titles.push(details.russian.trim());
     if (details?.name) titles.push(details.name.trim());
 
-    // Paperback 0.8 renders only the primary title, so the original name is
-    // also passed as an info row - that is what shows under the title.
+    // Paperback 0.8's compat wrapper forwards only primaryTitle, secondaryTitles,
+    // synopsis, thumbnailUrl and status - additionalInfo/author/artist are
+    // dropped. So the original name goes at the top of the synopsis, which is
+    // the one free text field that reaches the details page.
     const originalTitle = details?.name?.trim() ?? "";
-    const additionalInfo = {};
-    if (originalTitle && originalTitle !== details?.russian?.trim()) {
-        additionalInfo["Original title"] = originalTitle;
-    }
+    const russianTitle = details?.russian?.trim() ?? "";
+    const description = details?.description?.trim() ?? "";
+    const synopsis = originalTitle && originalTitle !== russianTitle
+        ? (description ? `${originalTitle}\n\n${description}` : originalTitle)
+        : description;
 
     const image = details.cover.preview ? details.cover.preview : "";
 
@@ -1380,9 +1383,8 @@ var parseMangaDetails = (data, mangaId) => {
                     tags: arrayTags.map((x) => App.createTag(x))
                 })
             ],
-            desc: details?.description ? details.description : "",
-            hentai: false,
-            additionalInfo
+            desc: synopsis,
+            hentai: false
         })
     });
 };
