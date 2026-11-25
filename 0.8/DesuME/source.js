@@ -2063,8 +2063,10 @@ var parseMangaDetails = (data, mangaId) => {
     async getHomePageSections(sectionCallback) {
       const sections = [
         {
+          // 59-!Hentai = "exclude the Hentai genre" (the site's own filter
+          // syntax: <id>-!<slug>). Keeps ecchi titles like One Punch Man.
           request: App.createRequest({
-            url: `${DOMAIN}/manga/?order_by=popular`,
+            url: `${DOMAIN}/manga/?order_by=popular&genres=59-!Hentai`,
             method: "GET"
           }),
           section: App.createHomeSection({
@@ -2135,8 +2137,12 @@ var parseMangaDetails = (data, mangaId) => {
     async getViewMoreItems(homepageSectionId, metadata) {
   const page = metadata?.page ?? 1;
   const order = homepageSectionId === "name" ? "name" : homepageSectionId === "popular" ? "popular" : "updated";
-  // The 18+ row is the Hentai genre; every other row is the plain catalog.
-  const filter = homepageSectionId === "adult" ? "&genres=Hentai" : "";
+  // 18+ is the Hentai genre; popular excludes it (59-!Hentai); the rest are plain.
+  const filter = homepageSectionId === "adult"
+    ? "&genres=Hentai"
+    : homepageSectionId === "popular"
+      ? "&genres=59-!Hentai"
+      : "";
 
   const request = App.createRequest({
     url: `${DOMAIN}/manga/?order_by=${order}${filter}&page=${page}`,
